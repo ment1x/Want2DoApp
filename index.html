@@ -1,0 +1,2322 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#F8F7F5">
+<title>Wochenplaner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+<style>
+/* ── TOKENS ── */
+:root {
+  --font: 'DM Sans', sans-serif;
+  --bg: #F8F7F5;
+  --surface: #FFFFFF;
+  --surface-2: #F2F1EF;
+  --border: rgba(0,0,0,0.07);
+  --text-1: #1A1A1A;
+  --text-2: #6B6B6B;
+  --text-3: #A8A8A8;
+  /* Categories */
+  --lino: #7C3AED; --lino-bg: #EDE9FE;
+  --friends: #16A34A; --friends-bg: #DCFCE7;
+  --projects: #2563EB; --projects-bg: #DBEAFE;
+  --household: #D97706; --household-bg: #FEF3C7;
+  --finance: #DC2626; --finance-bg: #FEE2E2;
+  /* Urgency */
+  --high: #DC2626; --high-bg: #FEE2E2;
+  --medium: #D97706; --medium-bg: #FEF3C7;
+  --low: #9CA3AF; --low-bg: #F3F4F6;
+  /* Radii */
+  --r-sm: 8px; --r-md: 14px; --r-lg: 20px; --r-xl: 26px;
+  /* Shadows */
+  --sh-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --sh-md: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
+  --sh-lg: 0 8px 28px rgba(0,0,0,0.10), 0 3px 8px rgba(0,0,0,0.05);
+  /* Layout */
+  --nav-h: 64px;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text-1);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+button { font-family: var(--font); cursor: pointer; border: none; background: none; -webkit-tap-highlight-color: transparent; }
+input, textarea, select { font-family: var(--font); -webkit-tap-highlight-color: transparent; }
+
+/* ── APP SHELL ── */
+#app {
+  display: flex; flex-direction: column;
+  height: 100%; max-width: 480px; margin: 0 auto;
+  position: relative;
+}
+
+/* ── HEADER ── */
+.app-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: calc(var(--safe-t) + 12px) 16px 10px;
+  background: var(--bg); flex-shrink: 0;
+}
+.app-header h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.3px; }
+.icon-btn {
+  width: 40px; height: 40px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-2); transition: background .15s;
+}
+.icon-btn:active { background: var(--surface-2); }
+.icon-btn svg { width: 20px; height: 20px; }
+
+/* ── TABS ── */
+main { flex: 1; overflow: hidden; position: relative; }
+.tab-pane {
+  position: absolute; inset: 0;
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding-bottom: calc(var(--nav-h) + var(--safe-b) + 80px);
+  opacity: 0; pointer-events: none;
+  transform: translateX(14px);
+  transition: opacity .22s ease, transform .22s ease;
+}
+.tab-pane.active { opacity: 1; pointer-events: all; transform: translateX(0); }
+
+/* ── BOTTOM NAV ── */
+#bnav {
+  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+  width: 100%; max-width: 480px;
+  height: calc(var(--nav-h) + var(--safe-b));
+  padding-bottom: var(--safe-b);
+  background: var(--surface); border-top: 1px solid var(--border);
+  display: flex; z-index: 100;
+  box-shadow: 0 -2px 16px rgba(0,0,0,0.05);
+}
+.ni {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 3px; color: var(--text-3);
+  transition: color .18s; min-height: 48px; position: relative;
+}
+.ni.active { color: var(--text-1); }
+.ni svg { width: 22px; height: 22px; stroke-width: 1.8; }
+.ni span { font-size: 11px; font-weight: 500; }
+.ni.active::after {
+  content: ''; position: absolute; top: 6px;
+  width: 20px; height: 3px; border-radius: 2px;
+  background: var(--text-1);
+}
+
+/* ── FAB ── */
+#fab {
+  position: fixed;
+  bottom: calc(var(--nav-h) + var(--safe-b) + 16px);
+  right: max(16px, calc(50vw - 240px + 16px));
+  width: 56px; height: 56px; border-radius: 50%;
+  background: var(--text-1); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: var(--sh-lg); z-index: 99;
+  transition: transform .25s cubic-bezier(.34,1.56,.64,1), opacity .2s;
+}
+#fab:active { transform: scale(.91); }
+#fab.hidden { opacity: 0; pointer-events: none; transform: scale(.8); }
+#fab svg { width: 24px; height: 24px; }
+
+/* ── SECTION LABEL ── */
+.slabel {
+  font-size: 11px; font-weight: 600; color: var(--text-3);
+  text-transform: uppercase; letter-spacing: .8px;
+  padding: 0 16px; margin-bottom: 8px;
+}
+
+/* ── FILTER CHIPS ── */
+.filter-bar {
+  padding: 8px 16px; display: flex; gap: 7px;
+  overflow-x: auto; scrollbar-width: none; flex-shrink: 0;
+}
+.filter-bar::-webkit-scrollbar { display: none; }
+.fchip {
+  display: flex; align-items: center; gap: 5px;
+  padding: 6px 13px; border-radius: 100px;
+  font-size: 12px; font-weight: 500; white-space: nowrap;
+  border: 1.5px solid transparent;
+  transition: all .15s; flex-shrink: 0; cursor: pointer;
+}
+.fchip svg { width: 12px; height: 12px; }
+
+/* ── TASK CARDS ── */
+.tlist { padding: 0 16px; }
+.tcw {
+  position: relative; margin-bottom: 10px;
+  overflow: hidden; border-radius: var(--r-md);
+}
+.del-bg {
+  position: absolute; inset: 0;
+  background: var(--finance-bg);
+  display: flex; align-items: center; justify-content: flex-end;
+  padding-right: 20px; color: var(--finance);
+  gap: 5px; font-size: 12px; font-weight: 600;
+  border-radius: var(--r-md);
+}
+.del-bg svg { width: 17px; height: 17px; }
+.tc {
+  position: relative; background: var(--surface);
+  border-radius: var(--r-md); padding: 13px 14px;
+  box-shadow: var(--sh-sm); cursor: pointer;
+  user-select: none; touch-action: pan-y; will-change: transform;
+}
+.tc-top {
+  display: flex; align-items: flex-start;
+  justify-content: space-between; gap: 8px; margin-bottom: 8px;
+}
+.tc-title { font-size: 15px; font-weight: 500; flex: 1; line-height: 1.35; }
+.tc-title.done { text-decoration: line-through; color: var(--text-3); }
+.udot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
+.tc-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cchip {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 3px 8px; border-radius: 100px;
+  font-size: 11px; font-weight: 500;
+}
+.cchip svg { width: 10px; height: 10px; }
+.ubadge { font-size: 11px; font-weight: 500; }
+.tage { font-size: 11px; color: var(--text-3); margin-left: auto; }
+.wbadge {
+  font-size: 11px; font-weight: 600;
+  color: var(--projects); background: var(--projects-bg);
+  padding: 2px 7px; border-radius: 100px;
+}
+.tc-desc {
+  font-size: 12px; color: var(--text-2);
+  margin-top: 6px; line-height: 1.45;
+}
+.done-area { opacity: .6; }
+
+/* ── DONE TOGGLE ── */
+.done-toggle {
+  display: flex; align-items: center; gap: 7px;
+  padding: 12px 16px; color: var(--text-3);
+  font-size: 13px; font-weight: 500; cursor: pointer;
+}
+.done-toggle svg { width: 15px; height: 15px; transition: transform .2s; }
+.done-toggle.open svg { transform: rotate(90deg); }
+
+/* ── EMPTY ── */
+.empty {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 10px; padding: 56px 40px; text-align: center;
+}
+.empty svg { width: 44px; height: 44px; color: var(--text-3); opacity: .45; }
+.empty p { font-size: 14px; color: var(--text-3); line-height: 1.5; }
+
+/* ── WEEKLY TAB ── */
+.wk-header { padding: 8px 16px 14px; }
+.wk-sublabel { font-size: 12px; color: var(--text-3); text-transform: uppercase; letter-spacing: .6px; font-weight: 600; margin-bottom: 2px; }
+.wk-title { font-size: 18px; font-weight: 600; letter-spacing: -.2px; }
+.wk-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.btn-sec {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border-radius: 100px;
+  font-size: 13px; font-weight: 500;
+  background: var(--surface); color: var(--text-2);
+  box-shadow: var(--sh-sm); border: 1px solid var(--border);
+  transition: background .15s;
+}
+.btn-sec svg { width: 13px; height: 13px; }
+.btn-sec:active { background: var(--surface-2); }
+
+.wlist { padding: 0 16px; }
+.wrow { margin-bottom: 16px; }
+.wrow-label {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px;
+  margin-bottom: 7px; padding-left: 2px;
+}
+.wrow-label svg { width: 11px; height: 11px; }
+
+/* Weekly card */
+.wcw { position: relative; border-radius: var(--r-md); }
+.wswipe-bg {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 18px; border-radius: var(--r-md);
+  transition: background .1s;
+}
+.wswipe-r { font-size: 12px; font-weight: 700; color: var(--friends); opacity: 0; transition: opacity .1s; display: flex; align-items: center; gap: 4px; }
+.wswipe-l { font-size: 12px; font-weight: 700; color: var(--finance); opacity: 0; transition: opacity .1s; display: flex; align-items: center; gap: 4px; }
+.wcard {
+  position: relative; background: var(--surface);
+  border-radius: var(--r-md); padding: 13px 14px;
+  box-shadow: var(--sh-sm); cursor: pointer;
+  user-select: none; touch-action: pan-y; will-change: transform;
+}
+.wcard.accepted { border-left: 3px solid var(--friends); }
+.wcard.wdone { opacity: .55; }
+.wcard-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.wacc-icon {
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--friends-bg); color: var(--friends);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.wacc-icon svg { width: 11px; height: 11px; }
+.wcard-title { font-size: 15px; font-weight: 500; flex: 1; line-height: 1.3; }
+.wcard-meta { font-size: 12px; color: var(--text-3); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.wcard-sched {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 12px; color: var(--text-2); margin-top: 6px;
+}
+.wcard-sched svg { width: 11px; height: 11px; }
+.swipe-hints {
+  display: flex; justify-content: space-between;
+  margin-top: 9px; padding-top: 7px; border-top: 1px solid var(--border);
+  font-size: 11px; color: var(--text-3);
+}
+.wempty {
+  background: var(--surface); border-radius: var(--r-md);
+  padding: 14px 16px;
+  border: 1.5px dashed rgba(0,0,0,0.10);
+  display: flex; align-items: center; gap: 10px;
+  color: var(--text-3); font-size: 13px; cursor: pointer;
+  transition: background .15s;
+}
+.wempty:active { background: var(--surface-2); }
+.wempty svg { width: 17px; height: 17px; flex-shrink: 0; }
+
+/* ── STATS ── */
+.stats-s { padding: 0 16px; margin-bottom: 22px; }
+.stat-card { background: var(--surface); border-radius: var(--r-lg); padding: 18px; box-shadow: var(--sh-sm); }
+.stat-card-title { font-size: 15px; font-weight: 600; margin-bottom: 16px; }
+.big-num { text-align: center; padding: 10px 0 20px; }
+.big-num-val { font-size: 54px; font-weight: 300; line-height: 1; letter-spacing: -3px; }
+.big-num-label { font-size: 12px; color: var(--text-3); margin-top: 4px; }
+.bchart {
+  display: flex; align-items: flex-end; gap: 10px;
+  height: 96px; padding-bottom: 24px; position: relative; margin-bottom: 4px;
+}
+.bchart::after {
+  content: ''; position: absolute; bottom: 24px; left: 0; right: 0;
+  height: 1px; background: var(--border);
+}
+.bg { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; height: 100%; }
+.bt { flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
+.bar { width: 100%; max-width: 36px; border-radius: 5px 5px 0 0; min-height: 3px; position: relative; }
+.bval {
+  position: absolute; top: -18px; left: 50%; transform: translateX(-50%);
+  font-size: 11px; font-weight: 600; color: var(--text-2); white-space: nowrap;
+}
+.blabel {
+  font-size: 9px; color: var(--text-2); text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;
+}
+.csrow {
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 0; border-bottom: 1px solid rgba(0,0,0,0.04);
+}
+.csrow:last-child { border-bottom: none; }
+.csicon {
+  width: 30px; height: 30px; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.csicon svg { width: 15px; height: 15px; }
+.csinfo { flex: 1; min-width: 0; }
+.cslabel { font-size: 13px; font-weight: 500; }
+.cstrack { height: 4px; background: var(--surface-2); border-radius: 2px; margin-top: 3px; overflow: hidden; }
+.csbar { height: 100%; border-radius: 2px; transition: width .5s cubic-bezier(.16,1,.3,1); }
+.cscount { font-size: 20px; font-weight: 600; min-width: 30px; text-align: right; }
+
+/* ── BACKDROP ── */
+.backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+  z-index: 200; opacity: 0; pointer-events: none; transition: opacity .25s ease;
+}
+.backdrop.open { opacity: 1; pointer-events: all; }
+
+/* ── BOTTOM SHEETS ── */
+.bsheet {
+  position: fixed; bottom: 0; left: 50%;
+  transform: translateX(-50%) translateY(105%);
+  width: 100%; max-width: 480px;
+  background: var(--surface); border-radius: var(--r-xl) var(--r-xl) 0 0;
+  z-index: 300;
+  transition: transform .35s cubic-bezier(.32,.72,0,1);
+  padding-bottom: calc(var(--safe-b) + 20px);
+  max-height: 93vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+}
+.bsheet.open { transform: translateX(-50%) translateY(0); }
+.sh { width: 36px; height: 4px; border-radius: 2px; background: rgba(0,0,0,0.09); margin: 10px auto 0; }
+.sheader { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 14px; }
+.stitle { font-size: 18px; font-weight: 600; }
+.sclose {
+  width: 32px; height: 32px; border-radius: 50%; background: var(--surface-2);
+  display: flex; align-items: center; justify-content: center; color: var(--text-2);
+}
+.sclose svg { width: 15px; height: 15px; }
+.sbody { padding: 0 20px; }
+.sfooter { padding: 16px 20px 0; display: flex; flex-direction: column; gap: 8px; }
+
+/* ── FORM ── */
+.fg { margin-bottom: 16px; }
+.flabel {
+  display: block; font-size: 11px; font-weight: 600; color: var(--text-3);
+  text-transform: uppercase; letter-spacing: .6px; margin-bottom: 6px;
+}
+.finput, .ftextarea {
+  width: 100%; padding: 12px 13px; border-radius: var(--r-md);
+  border: 1.5px solid var(--border); background: var(--bg);
+  font-size: 15px; color: var(--text-1); outline: none;
+  transition: border-color .15s; -webkit-appearance: none;
+}
+.finput:focus, .ftextarea:focus { border-color: rgba(0,0,0,0.22); }
+.ftextarea { resize: none; height: 78px; line-height: 1.5; }
+.finput.err { border-color: var(--finance); }
+
+.ogrid { display: grid; grid-template-columns: repeat(2,1fr); gap: 7px; }
+.ogrid.u3 { grid-template-columns: repeat(3,1fr); }
+.obtn {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 11px 6px; border-radius: var(--r-md);
+  border: 1.5px solid var(--border); background: var(--bg);
+  font-size: 11px; font-weight: 500; color: var(--text-2); text-align: center;
+  cursor: pointer; transition: all .15s;
+}
+.obtn svg { width: 17px; height: 17px; }
+.obtn.sel { font-weight: 600; border-color: currentColor; }
+.dt3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 7px; }
+.finput-sm {
+  width: 100%; padding: 9px 11px; border-radius: var(--r-md);
+  border: 1.5px solid var(--border); background: var(--bg);
+  font-size: 14px; color: var(--text-1); outline: none;
+  transition: border-color .15s; -webkit-appearance: none;
+}
+.finput-sm:focus { border-color: rgba(0,0,0,0.22); }
+
+/* ── BUTTONS ── */
+.btn-p {
+  width: 100%; padding: 14px; border-radius: var(--r-md);
+  background: var(--text-1); color: #fff;
+  font-size: 15px; font-weight: 600; text-align: center;
+  cursor: pointer; transition: opacity .15s;
+}
+.btn-p:active { opacity: .85; }
+.btn-danger {
+  width: 100%; padding: 11px; border-radius: var(--r-md);
+  background: none; color: var(--finance);
+  font-size: 14px; font-weight: 500; text-align: center; cursor: pointer;
+}
+.btn-done {
+  width: 100%; padding: 13px; border-radius: var(--r-md);
+  background: var(--friends-bg); color: var(--friends);
+  font-size: 15px; font-weight: 600; text-align: center; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  transition: opacity .15s;
+}
+.btn-done svg { width: 17px; height: 17px; }
+.btn-done:active { opacity: .85; }
+
+/* ── WEEK START MODAL ── */
+.moverlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.48);
+  z-index: 400; display: flex; align-items: flex-end;
+  opacity: 0; pointer-events: none; transition: opacity .25s;
+}
+.moverlay.open { opacity: 1; pointer-events: all; }
+.mcard {
+  width: 100%; max-width: 480px; margin: 0 auto;
+  background: var(--surface); border-radius: var(--r-xl) var(--r-xl) 0 0;
+  padding: 24px 20px calc(var(--safe-b) + 24px);
+  transform: translateY(105%); transition: transform .35s cubic-bezier(.32,.72,0,1);
+  max-height: 90vh; overflow-y: auto;
+}
+.moverlay.open .mcard { transform: translateY(0); }
+.mtitle { font-size: 20px; font-weight: 600; margin-bottom: 6px; }
+.msub { font-size: 14px; color: var(--text-2); margin-bottom: 16px; line-height: 1.5; }
+.ritem {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 11px 12px; background: var(--bg);
+  border-radius: var(--r-md); margin-bottom: 7px;
+}
+.rinfo { flex: 1; min-width: 0; margin-right: 10px; }
+.rtitle { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rcat { font-size: 11px; margin-top: 1px; }
+.rtog { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.tog {
+  width: 30px; height: 30px; border-radius: 50%; font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: opacity .15s;
+}
+.tog.y { background: var(--friends-bg); color: var(--friends); }
+.tog.n { background: var(--finance-bg); color: var(--finance); }
+.tog.sel { opacity: 1; }
+.tog:not(.sel) { opacity: .3; }
+.mbtn-row { display: flex; gap: 8px; margin-top: 18px; }
+.mbtn-row .btn-p { flex: 1; }
+.btn-outline {
+  flex: 1; padding: 14px; border-radius: var(--r-md);
+  background: none; color: var(--text-2);
+  font-size: 15px; font-weight: 600; text-align: center;
+  border: 1.5px solid rgba(0,0,0,0.1); cursor: pointer;
+}
+
+/* ── TOAST ── */
+.toast {
+  position: fixed;
+  bottom: calc(var(--nav-h) + var(--safe-b) + 80px);
+  left: 50%; transform: translateX(-50%) translateY(12px);
+  background: var(--text-1); color: #fff;
+  padding: 9px 20px; border-radius: 100px;
+  font-size: 13px; font-weight: 500; z-index: 500;
+  opacity: 0; transition: opacity .24s, transform .24s;
+  white-space: nowrap; pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ── RECURRING TOGGLE ── */
+.rec-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 13px 14px; background: var(--bg);
+  border-radius: var(--r-md); border: 1.5px solid var(--border);
+  cursor: pointer; transition: border-color .15s;
+}
+.rec-row.active { border-color: var(--projects); background: var(--projects-bg); }
+.rec-label { display: flex; align-items: center; gap: 9px; font-size: 14px; font-weight: 500; }
+.rec-label svg { width: 16px; height: 16px; }
+.rec-sub { font-size: 11px; color: var(--text-3); margin-top: 1px; font-weight: 400; }
+.rec-row.active .rec-sub { color: var(--projects); opacity: .8; }
+.tog-pill {
+  width: 42px; height: 24px; border-radius: 12px;
+  background: var(--border); position: relative; flex-shrink: 0;
+  transition: background .2s;
+}
+.tog-pill::after {
+  content: ''; position: absolute; top: 3px; left: 3px;
+  width: 18px; height: 18px; border-radius: 50%; background: #fff;
+  box-shadow: var(--sh-sm); transition: transform .2s cubic-bezier(.34,1.56,.64,1);
+}
+.rec-row.active .tog-pill { background: var(--projects); }
+.rec-row.active .tog-pill::after { transform: translateX(18px); }
+
+/* ── CATEGORY MANAGEMENT ── */
+.cat-mgmt-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 4px; border-bottom: 1px solid rgba(0,0,0,0.04);
+}
+.cat-mgmt-row:last-child { border-bottom: none; }
+.cat-mgmt-row .csicon { width: 28px; height: 28px; border-radius: 8px; }
+.cat-mgmt-row .csicon svg { width: 14px; height: 14px; }
+.cat-mgmt-label { flex: 1; font-size: 13px; font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cat-mgmt-row .icon-btn { width: 32px; height: 32px; }
+.cat-mgmt-row .icon-btn svg { width: 15px; height: 15px; }
+
+#cat-color-picker {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  padding: 4px 0; margin-bottom: 4px;
+}
+.cc-swatch {
+  width: 28px; height: 28px; border-radius: 50%;
+  cursor: pointer; border: 2px solid transparent;
+  transition: transform .12s;
+}
+.cc-swatch:active { transform: scale(.92); }
+
+@media(min-width: 480px) {
+  #fab { right: calc(50% - 240px + 16px); }
+}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <header class="app-header">
+    <h1 id="htitle">Aufgaben</h1>
+    <button class="icon-btn" id="btn-menu"><i data-lucide="more-vertical"></i></button>
+  </header>
+  <main>
+    <div id="tab-tasks"  class="tab-pane active"></div>
+    <div id="tab-weekly" class="tab-pane"></div>
+    <div id="tab-stats"  class="tab-pane"></div>
+  </main>
+  <button id="fab"><i data-lucide="plus"></i></button>
+  <nav id="bnav">
+    <button class="ni active" id="ni-tasks"><i data-lucide="check-square"></i><span>Aufgaben</span></button>
+    <button class="ni"        id="ni-weekly"><i data-lucide="calendar-days"></i><span>Wochenplan</span></button>
+    <button class="ni"        id="ni-stats"><i data-lucide="bar-chart-2"></i><span>Statistik</span></button>
+  </nav>
+</div>
+
+<!-- Backdrop -->
+<div class="backdrop" id="bkd"></div>
+
+<!-- ── TASK SHEET ── -->
+<div class="bsheet" id="sht-task">
+  <div class="sh"></div>
+  <div class="sheader">
+    <div class="stitle" id="sht-task-title">Neue Aufgabe</div>
+    <button class="sclose" id="sht-task-x"><i data-lucide="x"></i></button>
+  </div>
+  <div class="sbody">
+    <div class="fg">
+      <label class="flabel">Titel *</label>
+      <input type="text" class="finput" id="inp-title" placeholder="Was muss erledigt werden?" autocomplete="off">
+    </div>
+    <div class="fg">
+      <label class="flabel">Beschreibung</label>
+      <textarea class="ftextarea" id="inp-desc" placeholder="Details (optional)"></textarea>
+    </div>
+    <div class="fg">
+      <label class="flabel">Kategorie</label>
+      <div class="ogrid" id="cat-opts"></div>
+    </div>
+    <div class="fg">
+      <label class="flabel">Dringlichkeit</label>
+      <div class="ogrid u3" id="urg-opts"></div>
+    </div>
+    <div class="fg">
+      <label class="flabel">Wiederholung</label>
+      <div class="rec-row" id="rec-toggle">
+        <div class="rec-label">
+          <i data-lucide="repeat"></i>
+          <div>
+            <div>Wiederkehrend</div>
+            <div class="rec-sub">Nach Erledigung zurück in den Pool</div>
+          </div>
+        </div>
+        <div class="tog-pill"></div>
+      </div>
+    </div>
+  </div>
+  <div class="sfooter">
+    <button class="btn-p" id="btn-save-task">Speichern</button>
+    <button class="btn-danger" id="btn-del-task" style="display:none">Aufgabe löschen</button>
+  </div>
+</div>
+
+<!-- ── WEEKLY DETAIL SHEET ── -->
+<div class="bsheet" id="sht-wd">
+  <div class="sh"></div>
+  <div class="sheader">
+    <div class="stitle">Details & Zeitplanung</div>
+    <button class="sclose" id="sht-wd-x"><i data-lucide="x"></i></button>
+  </div>
+  <div class="sbody">
+    <div class="fg">
+      <label class="flabel">Titel</label>
+      <input type="text" class="finput" id="wd-title" placeholder="Titel">
+    </div>
+    <div class="fg">
+      <label class="flabel">Beschreibung</label>
+      <textarea class="ftextarea" id="wd-desc" placeholder="Beschreibung (optional)"></textarea>
+    </div>
+    <div class="fg">
+      <label class="flabel">Zeitplanung</label>
+      <div class="dt3">
+        <div>
+          <div class="flabel" style="font-size:9px;margin-bottom:3px">Datum</div>
+          <input type="date" class="finput-sm" id="wd-date">
+        </div>
+        <div>
+          <div class="flabel" style="font-size:9px;margin-bottom:3px">Uhrzeit</div>
+          <input type="time" class="finput-sm" id="wd-time">
+        </div>
+        <div>
+          <div class="flabel" style="font-size:9px;margin-bottom:3px">Dauer (min)</div>
+          <input type="number" class="finput-sm" id="wd-dur" placeholder="60" min="5" step="5">
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="sfooter">
+    <button class="btn-done" id="btn-markdone"><i data-lucide="check-circle"></i>Als erledigt markieren</button>
+    <button class="btn-p"    id="btn-save-wd">Änderungen speichern</button>
+  </div>
+</div>
+
+<!-- ── MENU SHEET ── -->
+<div class="bsheet" id="sht-menu">
+  <div class="sh"></div>
+  <div class="sheader">
+    <div class="stitle">Einstellungen</div>
+    <button class="sclose" id="sht-menu-x"><i data-lucide="x"></i></button>
+  </div>
+  <div class="sbody" style="padding-bottom:6px">
+
+    <!-- SEKTION KATEGORIEN -->
+    <div class="fg">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div class="slabel" style="padding:0;margin-bottom:0">Kategorien</div>
+        <span id="cat-limit-hint" style="font-size:11px;color:var(--text-3);display:none">max. 6</span>
+      </div>
+      <div id="cat-mgmt-list" style="margin-bottom:10px"></div>
+      <button id="btn-add-cat" class="btn-sec" style="width:100%;justify-content:center;padding:11px;border-radius:12px;gap:6px;font-size:13px">
+        <i data-lucide="plus"></i>Kategorie hinzufügen
+      </button>
+      <!-- ADD/EDIT SUBFORM -->
+      <div id="cat-edit-form" style="display:none;margin-top:12px;padding:14px;background:var(--bg);border-radius:var(--r-md);border:1.5px solid var(--border)">
+        <input type="hidden" id="cat-edit-key" value="">
+        <div class="fg" style="margin-bottom:12px">
+          <label class="flabel">Name</label>
+          <input type="text" class="finput" id="cat-edit-label" placeholder="Kategorie-Name" autocomplete="off">
+        </div>
+        <div class="fg" style="margin-bottom:12px">
+          <label class="flabel">Farbe</label>
+          <div id="cat-color-picker"></div>
+        </div>
+        <div class="fg" style="margin-bottom:12px">
+          <label class="flabel">Icon</label>
+          <div id="cat-icon-picker" class="ogrid" style="grid-template-columns:repeat(4,1fr)"></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button class="btn-p" id="btn-cat-save">Speichern</button>
+          <button class="btn-danger" id="btn-cat-cancel">Abbrechen</button>
+        </div>
+      </div>
+    </div>
+    <hr style="border:none;border-top:1px solid var(--border);margin-bottom:16px">
+
+    <!-- SEKTION A: Dringlichkeitsstufen -->
+    <div class="fg">
+      <div class="slabel" style="padding:0;margin-bottom:10px">Dringlichkeitsstufen</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="width:8px;height:8px;border-radius:50%;background:#DC2626;flex-shrink:0"></div>
+          <input type="text" id="inp-lbl-high" class="finput" style="flex:1;padding:8px 10px;font-size:13px" value="Heute" placeholder="Label">
+          <input type="number" id="inp-wgt-high" class="finput" style="width:56px;padding:8px 8px;font-size:13px;text-align:center" min="1" max="10" step="1" value="3">
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="width:8px;height:8px;border-radius:50%;background:#D97706;flex-shrink:0"></div>
+          <input type="text" id="inp-lbl-medium" class="finput" style="flex:1;padding:8px 10px;font-size:13px" value="Diese Woche" placeholder="Label">
+          <input type="number" id="inp-wgt-medium" class="finput" style="width:56px;padding:8px 8px;font-size:13px;text-align:center" min="1" max="10" step="1" value="2">
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="width:8px;height:8px;border-radius:50%;background:#9CA3AF;flex-shrink:0"></div>
+          <input type="text" id="inp-lbl-low" class="finput" style="flex:1;padding:8px 10px;font-size:13px" value="Irgendwann" placeholder="Label">
+          <input type="number" id="inp-wgt-low" class="finput" style="width:56px;padding:8px 8px;font-size:13px;text-align:center" min="1" max="10" step="1" value="1">
+        </div>
+      </div>
+    </div>
+
+    <!-- SEKTION B: Aufgabenalter -->
+    <div class="fg">
+      <div class="slabel" style="padding:0;margin-bottom:6px">Aufgabenalter</div>
+      <p style="font-size:12px;color:var(--text-2);margin-bottom:10px;line-height:1.5">Alle X Tage steigt das Gewicht einer Aufgabe um +1× ihr Basisgewicht.</p>
+      <div style="display:flex;align-items:center;gap:10px">
+        <input type="range" id="inp-age-div" min="1" max="30" step="1" value="7"
+          style="flex:1;accent-color:var(--text-1)">
+        <span id="lbl-age-div" style="font-size:13px;font-weight:600;color:var(--text-1);min-width:50px;text-align:right">7 Tage</span>
+      </div>
+    </div>
+
+    <!-- SEKTION C: Visualisierung -->
+    <div class="fg">
+      <div class="slabel" style="padding:0;margin-bottom:8px">Vorschau Auswahlwahrscheinlichkeit</div>
+      <div style="background:var(--bg);border-radius:var(--r-md);padding:8px 4px 4px;border:1.5px solid var(--border)">
+        <svg id="scoring-svg" width="100%" viewBox="0 0 300 160" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+    </div>
+
+    <!-- Speichern -->
+    <button class="btn-p" id="btn-save-scoring" style="margin-bottom:16px">Einstellungen speichern</button>
+    <hr style="border:none;border-top:1px solid var(--border);margin-bottom:16px">
+
+    <button id="btn-expjson" class="btn-sec" style="width:100%;justify-content:flex-start;padding:14px 16px;border-radius:12px;margin-bottom:8px;gap:10px;font-size:14px">
+      <i data-lucide="download"></i>Daten exportieren (JSON)
+    </button>
+    <button id="btn-impjson" class="btn-sec" style="width:100%;justify-content:flex-start;padding:14px 16px;border-radius:12px;margin-bottom:8px;gap:10px;font-size:14px">
+      <i data-lucide="upload"></i>Daten importieren (JSON)
+    </button>
+    <input type="file" id="file-imp" accept=".json" style="display:none">
+    <p style="font-size:11px;color:var(--text-3);text-align:center;padding:8px 0">Daten werden lokal im Browser gespeichert</p>
+  </div>
+</div>
+
+<!-- ── WEEK START MODAL ── -->
+<div class="moverlay" id="mod-wk">
+  <div class="mcard">
+    <div class="mtitle">🗓️ Wochenplan</div>
+    <div class="msub" id="mod-wk-sub">Möchtest du einen neuen Wochenplan für diese Woche erstellen?</div>
+    <div id="mod-return-sec"></div>
+    <div class="mbtn-row">
+      <button class="btn-outline" id="btn-wk-skip">Später</button>
+      <button class="btn-p"       id="btn-wk-start">Plan erstellen</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<script>
+/* ════════════════════════════════════
+   CONFIG
+════════════════════════════════════ */
+const SK = 'todoapp_data';
+const DEFAULT_CATS = {
+  lino:      { label:'Lino Aktivität', short:'Lino',     color:'#7C3AED', bg:'#EDE9FE', icon:'activity'    },
+  friends:   { label:'Freunde',        short:'Freunde',  color:'#16A34A', bg:'#DCFCE7', icon:'users'       },
+  projects:  { label:'Projekte',       short:'Projekte', color:'#2563EB', bg:'#DBEAFE', icon:'folder'      },
+  household: { label:'Haushalt',       short:'Haushalt', color:'#D97706', bg:'#FEF3C7', icon:'home'        },
+  finance:   { label:'Finanzen & Co',  short:'Finanzen', color:'#DC2626', bg:'#FEE2E2', icon:'trending-up' },
+};
+const URGS = {
+  high:   { label:'Heute',       weight:3, color:'#DC2626', bg:'#FEE2E2', icon:'zap'          },
+  medium: { label:'Diese Woche', weight:2, color:'#D97706', bg:'#FEF3C7', icon:'clock'        },
+  low:    { label:'Irgendwann',  weight:1, color:'#9CA3AF', bg:'#F3F4F6', icon:'minus-circle' },
+};
+const URG_KEYS = Object.keys(URGS);
+
+const CAT_PALETTE = [
+  { color:'#7C3AED', bg:'#EDE9FE' },
+  { color:'#16A34A', bg:'#DCFCE7' },
+  { color:'#2563EB', bg:'#DBEAFE' },
+  { color:'#D97706', bg:'#FEF3C7' },
+  { color:'#DC2626', bg:'#FEE2E2' },
+  { color:'#0891B2', bg:'#CFFAFE' },
+  { color:'#DB2777', bg:'#FCE7F3' },
+  { color:'#4F46E5', bg:'#EEF2FF' },
+];
+const CAT_ICONS = ['activity','users','folder','home','trending-up','briefcase','book','heart','star','shopping-cart','dumbbell','globe'];
+
+/* ════════════════════════════════════
+   STATE
+════════════════════════════════════ */
+let S    = { tasks:[], weeklyPlans:{}, settings:{
+  retentionWeeks:12, lastCleanup:null,
+  urgencyLabels:  { high:'Heute', medium:'Diese Woche', low:'Irgendwann' },
+  urgencyWeights: { high:3, medium:2, low:1 },
+  ageDivisor: 7,
+}, cats: {} };
+let activeTab    = 'tasks';
+let activeFilter = 'all';
+let editId       = null;   // task being edited
+let wdTaskId     = null;   // weekly-detail task
+let wdCat        = null;
+let doneOpen     = false;
+let selCat       = 'lino';
+let selUrg       = 'medium';
+let selRecurring = false;
+let pendReturn   = [];     // tasks from prev week awaiting decision
+let pendDec      = {};     // { taskId: bool (true = return to pool) }
+
+// Category-edit form state
+let catEditSelColor = '#7C3AED';
+let catEditSelBg    = '#EDE9FE';
+let catEditSelIcon  = 'activity';
+
+/* ════════════════════════════════════
+   PERSISTENCE
+════════════════════════════════════ */
+function load() {
+  try {
+    const raw = localStorage.getItem(SK);
+    if (raw) {
+      const p = JSON.parse(raw);
+      S = {
+        tasks:       Array.isArray(p.tasks) ? p.tasks : [],
+        weeklyPlans: p.weeklyPlans || {},
+        settings:    Object.assign({
+          retentionWeeks:12, lastCleanup:null,
+          urgencyLabels:  { high:'Heute', medium:'Diese Woche', low:'Irgendwann' },
+          urgencyWeights: { high:3, medium:2, low:1 },
+          ageDivisor: 7,
+        }, p.settings || {}),
+        cats: p.cats && Object.keys(p.cats).length > 0
+              ? p.cats
+              : JSON.parse(JSON.stringify(DEFAULT_CATS)),
+      };
+    } else {
+      S.cats = JSON.parse(JSON.stringify(DEFAULT_CATS));
+    }
+  } catch(e) { console.warn('load', e); }
+  if (!S.cats || Object.keys(S.cats).length === 0) {
+    S.cats = JSON.parse(JSON.stringify(DEFAULT_CATS));
+  }
+}
+function save() {
+  try { localStorage.setItem(SK, JSON.stringify(S)); } catch(e) { console.warn('save', e); }
+}
+function getCatKeys() { return Object.keys(S.cats); }
+
+/* ════════════════════════════════════
+   UTILITIES
+════════════════════════════════════ */
+function uid() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
+
+// ISO week key like "2025-W18"
+function isoWeek(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dn = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dn);
+  const y1 = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return { year: d.getUTCFullYear(), week: Math.ceil((((d - y1) / 86400000) + 1) / 7) };
+}
+function weekKey(date = new Date()) {
+  const { year, week } = isoWeek(date);
+  return `${year}-W${String(week).padStart(2, '0')}`;
+}
+function prevWeekKey() {
+  const d = new Date(); d.setDate(d.getDate() - 7); return weekKey(d);
+}
+function weekLabel(wk) {
+  const m = wk.match(/(\d{4})-W(\d{2})/);
+  if (!m) return wk;
+  const yr = +m[1], wn = +m[2];
+  // Monday of that ISO week
+  const jan4 = new Date(yr, 0, 4);
+  const dow  = jan4.getDay() || 7;
+  const mon  = new Date(jan4);
+  mon.setDate(jan4.getDate() - dow + 1 + (wn - 1) * 7);
+  const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+  const f = d => d.toLocaleDateString('de-DE', { day:'numeric', month:'short' });
+  return `KW ${wn}: ${f(mon)} – ${f(sun)}`;
+}
+
+function fmtAge(iso) {
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (days === 0)  return 'Heute';
+  if (days === 1)  return 'Gestern';
+  if (days < 7)   return `vor ${days} Tagen`;
+  if (days < 14)  return 'vor 1 Woche';
+  return `vor ${Math.floor(days / 7)} Wochen`;
+}
+
+// Weighted random – Score = urgencyWeight × (1 + ageInDays/7)
+function wRandom(tasks) {
+  if (!tasks.length) return null;
+  const now = Date.now();
+  const scored = tasks.map(t => {
+    const age = (now - new Date(t.createdAt).getTime()) / 86400000;
+    return { t, s: S.settings.urgencyWeights[t.urgency] * (1 + age / S.settings.ageDivisor) };
+  });
+  const total = scored.reduce((a, x) => a + x.s, 0);
+  let r = Math.random() * total;
+  for (const { t, s } of scored) { r -= s; if (r <= 0) return t; }
+  return scored[scored.length - 1].t;
+}
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function toast(msg, dur = 2200) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), dur);
+}
+
+function cleanup() {
+  const cut = Date.now() - S.settings.retentionWeeks * 7 * 86400000;
+  S.tasks = S.tasks.filter(t => {
+    if (t.status === 'done' && t.completedAt)
+      return new Date(t.completedAt).getTime() > cut;
+    return true;
+  });
+  S.settings.lastCleanup = new Date().toISOString();
+  save();
+}
+
+function ri() { if (window.lucide) window.lucide.createIcons(); }
+
+/* ════════════════════════════════════
+   TASK CRUD
+════════════════════════════════════ */
+function createTask(d) {
+  const t = {
+    id: uid(), title: d.title,
+    description: d.description || null,
+    category: d.category, urgency: d.urgency,
+    recurring: d.recurring || false,
+    createdAt: new Date().toISOString(),
+    completedAt: null, scheduledDate: null,
+    scheduledStart: null, scheduledDuration: null,
+    weeklySlot: null, status: 'open',
+  };
+  S.tasks.push(t); save(); return t;
+}
+function updateTask(id, d) {
+  const i = S.tasks.findIndex(t => t.id === id);
+  if (i < 0) return;
+  S.tasks[i] = Object.assign({}, S.tasks[i], d);
+  save();
+}
+function deleteTask(id) {
+  const t = S.tasks.find(t => t.id === id);
+  if (t && t.weeklySlot) {
+    const pl = S.weeklyPlans[t.weeklySlot];
+    if (pl) getCatKeys().forEach(c => { if (pl[c] && pl[c].taskId === id) pl[c] = null; });
+  }
+  S.tasks = S.tasks.filter(t => t.id !== id);
+  save();
+}
+function markDone(id) {
+  const t = S.tasks.find(x => x.id === id);
+  if (!t) return;
+  const now = new Date().toISOString();
+  if (t.recurring) {
+    // Keep in pool: record completion for stats, reset age, clear weekly slot
+    updateTask(id, {
+      status:      'open',
+      completedAt: now,       // snapshot for stats
+      createdAt:   now,       // reset age → low score initially
+      weeklySlot:  null,
+      scheduledDate:     null,
+      scheduledStart:    null,
+      scheduledDuration: null,
+    });
+    // Clear from any weekly plan slot
+    if (t.weeklySlot) {
+      const pl = S.weeklyPlans[t.weeklySlot];
+      if (pl) getCatKeys().forEach(c => { if (pl[c] && pl[c].taskId === id) pl[c] = null; });
+      save();
+    }
+  } else {
+    updateTask(id, { status: 'done', completedAt: now });
+  }
+}
+
+/* ════════════════════════════════════
+   CATEGORY CRUD
+════════════════════════════════════ */
+function autoShort(label) {
+  const first = label.split(' ')[0];
+  return first.length > 8 ? first.slice(0, 8) : first;
+}
+
+function addCategory(label, color, bg, icon) {
+  const key = 'cat_' + Date.now().toString(36);
+  S.cats[key] = { label, short: autoShort(label), color, bg, icon };
+  save(); return key;
+}
+
+function updateCategory(key, label, color, bg, icon) {
+  S.cats[key] = { label, short: autoShort(label), color, bg, icon };
+  save();
+}
+
+function deleteCategory(key) {
+  // Tasks dieser Kategorie löschen
+  const toRemove = S.tasks.filter(t => t.category === key).map(t => t.id);
+  S.tasks = S.tasks.filter(t => t.category !== key);
+  // Aus weeklyPlans entfernen
+  Object.values(S.weeklyPlans).forEach(plan => {
+    if (plan && plan[key]) delete plan[key];
+  });
+  // Kategorie entfernen
+  delete S.cats[key];
+  save();
+}
+
+/* ════════════════════════════════════
+   WEEKLY PLAN
+════════════════════════════════════ */
+function ensurePlan(wk) {
+  if (!S.weeklyPlans[wk]) {
+    S.weeklyPlans[wk] = {};
+    getCatKeys().forEach(c => { S.weeklyPlans[wk][c] = null; });
+  }
+  return S.weeklyPlans[wk];
+}
+
+// Pick a task for a category, excluding already-used and rejected IDs
+function suggestForCat(cat, wk, extraExclude = []) {
+  const plan = S.weeklyPlans[wk] || {};
+  const exc  = new Set(extraExclude);
+  // Exclude tasks already placed in other slots this week
+  getCatKeys().forEach(c => {
+    if (c !== cat && plan[c] && plan[c].taskId) exc.add(plan[c].taskId);
+  });
+  // Exclude previously rejected for this slot
+  const slot = plan[cat];
+  if (slot && slot.rejected) slot.rejected.forEach(id => exc.add(id));
+
+  const elig = S.tasks.filter(t =>
+    t.category === cat && t.status === 'open' && !exc.has(t.id)
+  );
+  return wRandom(elig);
+}
+
+function generatePlan(wk) {
+  ensurePlan(wk);
+  getCatKeys().forEach(cat => {
+    const t = suggestForCat(cat, wk);
+    if (t) {
+      S.weeklyPlans[wk][cat] = { taskId: t.id, accepted: false, rejected: [] };
+      updateTask(t.id, { status: 'weekly', weeklySlot: wk });
+    } else {
+      S.weeklyPlans[wk][cat] = null;
+    }
+  });
+  save();
+}
+
+function acceptSlot(cat, wk) {
+  const pl = S.weeklyPlans[wk];
+  if (!pl || !pl[cat]) return;
+  pl[cat].accepted = true; save();
+}
+
+function rejectSlot(cat, wk) {
+  const pl = S.weeklyPlans[wk];
+  if (!pl) return;
+  const old   = pl[cat];
+  const oldId = old ? old.taskId : null;
+  const oldRej = (old && old.rejected) ? old.rejected : [];
+  // Move old task back to open pool
+  if (oldId) updateTask(oldId, { status:'open', weeklySlot:null });
+  const allRej = oldId ? [...oldRej, oldId] : oldRej;
+  // Find next suggestion (exclude all previously rejected)
+  const nt = suggestForCat(cat, wk, allRej);
+  if (nt) {
+    pl[cat] = { taskId: nt.id, accepted: false, rejected: allRej };
+    updateTask(nt.id, { status:'weekly', weeklySlot: wk });
+  } else {
+    pl[cat] = { taskId: null, accepted: false, rejected: allRej };
+  }
+  save();
+}
+
+// After a task is marked done, fill the slot with a fresh suggestion
+function refillSlot(cat, wk, doneTaskId) {
+  const pl = S.weeklyPlans[wk];
+  if (!pl) return;
+  const prevRej = (pl[cat] && pl[cat].rejected) ? pl[cat].rejected : [];
+  // Always exclude the just-completed task (prevents immediate re-suggestion of recurring tasks)
+  const allRej = doneTaskId ? [...prevRej, doneTaskId] : prevRej;
+  const nt = suggestForCat(cat, wk, allRej);
+  if (nt) {
+    pl[cat] = { taskId: nt.id, accepted: false, rejected: allRej };
+    updateTask(nt.id, { status: 'weekly', weeklySlot: wk });
+  } else {
+    pl[cat] = { taskId: null, accepted: false, rejected: allRej };
+  }
+  save();
+}
+
+function unfinishedPrevWeek() {
+  const pk = prevWeekKey();
+  const pl = S.weeklyPlans[pk];
+  if (!pl) return [];
+  const res = [];
+  getCatKeys().forEach(c => {
+    if (pl[c] && pl[c].taskId) {
+      const t = S.tasks.find(x => x.id === pl[c].taskId);
+      if (t && t.status === 'weekly') res.push(t);
+    }
+  });
+  return res;
+}
+
+/* ════════════════════════════════════
+   RENDER TAB 1 – TASKS
+════════════════════════════════════ */
+function renderFilterBar() {
+  const bar = document.getElementById('tab-tasks').querySelector('.filter-bar');
+  if (!bar) return;
+  const items = [
+    { key:'all',   short:'Alle',     color:'#1A1A1A', bg:'#F3F4F6',   icon:'layers' },
+    ...getCatKeys().map(k => ({ key:k, short:S.cats[k].short, color:S.cats[k].color, bg:S.cats[k].bg, icon:S.cats[k].icon })),
+  ];
+  bar.innerHTML = items.map(c => {
+    const a = activeFilter === c.key;
+    return `<button class="fchip" data-f="${c.key}"
+      style="color:${c.color};background:${a ? c.bg : 'white'};border-color:${a ? c.color : 'rgba(0,0,0,0.07)'}">
+      <i data-lucide="${c.icon}"></i>${c.short}
+    </button>`;
+  }).join('');
+  bar.querySelectorAll('.fchip').forEach(b => {
+    b.addEventListener('click', () => {
+      activeFilter = b.dataset.f;
+      renderFilterBar(); renderTaskList(); ri();
+    });
+  });
+}
+
+function taskCardHTML(t) {
+  const cat = S.cats[t.category], urg = URGS[t.urgency];
+  const done = t.status === 'done', wkly = t.status === 'weekly';
+  const descText = t.description
+    ? `<div class="tc-desc">${esc(t.description).substring(0,100)}${t.description.length>100?'…':''}</div>` : '';
+  return `<div class="tcw" data-id="${t.id}">
+    <div class="del-bg"><i data-lucide="trash-2"></i><span>Löschen</span></div>
+    <div class="tc${done ? ' done-area' : ''}" data-id="${t.id}">
+      <div class="tc-top">
+        <div class="tc-title${done ? ' done' : ''}">${esc(t.title)}</div>
+        <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
+          ${t.recurring ? '<span title="Wiederkehrend" style="font-size:13px;line-height:1">↺</span>' : ''}
+          <div class="udot" style="background:${urg.color}"></div>
+        </div>
+      </div>
+      <div class="tc-meta">
+        <span class="cchip" style="background:${cat.bg};color:${cat.color}">
+          <i data-lucide="${cat.icon}"></i>${cat.short}
+        </span>
+        <span class="ubadge" style="color:${urg.color}">${S.settings.urgencyLabels[t.urgency]}</span>
+        ${t.recurring ? '<span class="wbadge" style="color:var(--projects);background:var(--projects-bg)">↺ Wiederkehrend</span>' : ''}
+        ${wkly ? '<span class="wbadge">Im Plan</span>' : ''}
+        <span class="tage">${fmtAge(t.createdAt)}</span>
+      </div>
+      ${descText}
+    </div>
+  </div>`;
+}
+
+function renderTaskList() {
+  const wrap = document.getElementById('tab-tasks').querySelector('.tlist-wrap');
+  if (!wrap) return;
+  let open = S.tasks.filter(t => t.status !== 'done');
+  if (activeFilter !== 'all') open = open.filter(t => t.category === activeFilter);
+  open.sort((a, b) => {
+    const w = S.settings.urgencyWeights;
+    if (w[b.urgency] !== w[a.urgency]) return w[b.urgency] - w[a.urgency];
+    return new Date(a.createdAt) - new Date(b.createdAt);
+  });
+  let done = S.tasks.filter(t => t.status === 'done');
+  if (activeFilter !== 'all') done = done.filter(t => t.category === activeFilter);
+  done.sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
+
+  let html = '';
+  if (!open.length && !done.length) {
+    html = `<div class="empty">
+      <i data-lucide="inbox"></i>
+      <p>Keine Aufgaben vorhanden.<br>Erstelle deine erste mit dem + Button!</p>
+    </div>`;
+  } else {
+    if (open.length) {
+      html += `<div class="tlist" id="open-list">${open.map(taskCardHTML).join('')}</div>`;
+    } else {
+      html += `<div class="empty" style="padding:36px 40px 16px">
+        <p>Alle Aufgaben erledigt! 🎉</p></div>`;
+    }
+    if (done.length) {
+      html += `<div class="done-toggle${doneOpen ? ' open' : ''}" id="dtog">
+        <i data-lucide="chevron-right"></i>
+        <span>Erledigt (${done.length})</span>
+      </div>`;
+      if (doneOpen) {
+        html += `<div class="tlist" id="done-list">${done.map(taskCardHTML).join('')}</div>`;
+      }
+    }
+  }
+  wrap.innerHTML = html;
+
+  wrap.querySelector('#dtog')?.addEventListener('click', () => {
+    doneOpen = !doneOpen; renderTaskList(); ri();
+  });
+  wrap.querySelectorAll('.tc').forEach(el => {
+    el.addEventListener('click', () => openTaskSheet(el.dataset.id));
+  });
+  wrap.querySelectorAll('.tcw').forEach(w => {
+    initSwipeDel(w.querySelector('.tc'), w.dataset.id);
+  });
+}
+
+function renderTasksTab() {
+  const pane = document.getElementById('tab-tasks');
+  // Build skeleton if first render
+  if (!pane.querySelector('.filter-bar')) {
+    pane.innerHTML = `<div class="filter-bar"></div><div class="tlist-wrap" style="margin-top:2px"></div>`;
+  }
+  renderFilterBar();
+  renderTaskList();
+}
+
+/* ════════════════════════════════════
+   RENDER TAB 2 – WEEKLY
+════════════════════════════════════ */
+function renderWeeklyTab() {
+  const pane = document.getElementById('tab-weekly');
+  const wk   = weekKey();
+
+  const plan = S.weeklyPlans[wk];
+  let headerHTML = `
+    <div class="wk-header">
+      <div class="wk-sublabel">Aktuelle Woche</div>
+      <div class="wk-title">${weekLabel(wk)}</div>
+      <div class="wk-actions">
+        <button class="btn-sec" id="btn-newplan"><i data-lucide="refresh-cw"></i>Neu generieren</button>
+        <button class="btn-sec" id="btn-expics"><i data-lucide="calendar"></i>Kalender (.ics)</button>
+      </div>
+    </div>
+  `;
+
+  if (!plan) {
+    pane.innerHTML = headerHTML + `
+      <div class="empty" style="padding:44px 40px 20px">
+        <i data-lucide="calendar-plus"></i>
+        <p>Noch kein Wochenplan.<br>Erstelle deinen Plan für diese Woche!</p>
+      </div>
+      <div style="padding:0 16px 16px">
+        <button class="btn-p" id="btn-gen-inline">Wochenplan erstellen</button>
+      </div>`;
+    pane.querySelector('#btn-gen-inline')?.addEventListener('click', () => {
+      generatePlan(wk); renderWeeklyTab(); ri();
+    });
+    pane.querySelector('#btn-newplan')?.addEventListener('click', () => {
+      if (confirm('Aktuellen Wochenplan verwerfen und neu generieren?')) {
+        // Free all weekly tasks first
+        freePlanTasks(wk);
+        delete S.weeklyPlans[wk];
+        generatePlan(wk); renderWeeklyTab(); ri();
+      }
+    });
+    pane.querySelector('#btn-expics')?.addEventListener('click', exportICS);
+    ri(); return;
+  }
+
+  let rowsHTML = '';
+  getCatKeys().forEach(cat => {
+    const ci   = S.cats[cat];
+    const slot = plan[cat];
+    const t    = slot && slot.taskId ? S.tasks.find(x => x.id === slot.taskId) : null;
+    rowsHTML += `<div class="wrow">
+      <div class="wrow-label" style="color:${ci.color}">
+        <i data-lucide="${ci.icon}"></i>${ci.label}
+      </div>
+      ${t ? wCardHTML(t, slot, cat) : wEmptyHTML(cat)}
+    </div>`;
+  });
+
+  pane.innerHTML = headerHTML + `<div class="wlist">${rowsHTML}</div>`;
+
+  // Events
+  pane.querySelector('#btn-newplan')?.addEventListener('click', () => {
+    if (confirm('Aktuellen Wochenplan verwerfen und neu generieren?')) {
+      freePlanTasks(wk);
+      delete S.weeklyPlans[wk];
+      generatePlan(wk); renderWeeklyTab(); ri();
+    }
+  });
+  pane.querySelector('#btn-expics')?.addEventListener('click', exportICS);
+
+  pane.querySelectorAll('.wcw[data-cat]').forEach(wrapper => {
+    const cat  = wrapper.dataset.cat;
+    const tid  = wrapper.dataset.tid;
+    const slot = plan[cat];
+    if (!tid) {
+      // Empty slot – tap to open tasks for that category
+      wrapper.addEventListener('click', () => { activeFilter = cat; switchTab('tasks'); });
+      return;
+    }
+    const t   = S.tasks.find(x => x.id === tid);
+    const card = wrapper.querySelector('.wcard');
+    if (!card) return;
+    // Tapping always opens detail sheet
+    card.addEventListener('click', () => { if (!card._sw) openWDSheet(tid, cat); });
+    // Only active (non-done, non-accepted) cards get swipe
+    if (t && t.status !== 'done' && slot && !slot.accepted) {
+      initWeeklySwipe(wrapper, card, cat, wk);
+    }
+  });
+
+  ri();
+}
+
+function freePlanTasks(wk) {
+  const pl = S.weeklyPlans[wk];
+  if (!pl) return;
+  getCatKeys().forEach(c => {
+    if (pl[c] && pl[c].taskId) {
+      const t = S.tasks.find(x => x.id === pl[c].taskId);
+      if (t && t.status === 'weekly') updateTask(t.id, { status:'open', weeklySlot:null });
+    }
+  });
+}
+
+function wCardHTML(t, slot, cat) {
+  const urg  = URGS[t.urgency];
+  const done = t.status === 'done';
+  const acc  = slot && slot.accepted;
+
+  let sched = '';
+  if (t.scheduledDate) {
+    const d  = new Date(t.scheduledDate + 'T00:00:00');
+    const ds = d.toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short' });
+    sched = `<div class="wcard-sched">
+      <i data-lucide="calendar"></i>
+      ${ds}${t.scheduledStart ? ' · ' + t.scheduledStart : ''}${t.scheduledDuration ? ' · ' + t.scheduledDuration + ' min' : ''}
+    </div>`;
+  }
+
+  const accIcon = done
+    ? `<div class="wacc-icon" style="background:var(--friends-bg);color:var(--friends)"><i data-lucide="check-circle"></i></div>`
+    : acc
+      ? `<div class="wacc-icon"><i data-lucide="check"></i></div>`
+      : '';
+
+  const hints = (!done && !acc)
+    ? `<div class="swipe-hints"><span>← Ablehnen</span><span>Akzeptieren →</span></div>` : '';
+
+  return `<div class="wcw" data-cat="${cat}" data-tid="${t.id}">
+    <div class="wswipe-bg">
+      <span class="wswipe-r"><i data-lucide="check" style="width:13px;height:13px"></i> Akzeptieren</span>
+      <span class="wswipe-l">Ablehnen <i data-lucide="x" style="width:13px;height:13px"></i></span>
+    </div>
+    <div class="wcard${acc ? ' accepted' : ''}${done ? ' wdone' : ''}">
+      <div class="wcard-top">
+        ${accIcon}
+        <div class="wcard-title"${done ? ' style="text-decoration:line-through;color:var(--text-3)"' : ''}>${esc(t.title)}</div>
+        <div class="udot" style="background:${urg.color}"></div>
+      </div>
+      <div class="wcard-meta">
+        <span>${S.settings.urgencyLabels[t.urgency]}</span>
+        ${t.recurring ? '<span style="color:var(--projects);font-weight:600">↺ Wiederkehrend</span>' : ''}
+        ${acc && !done ? '<span style="color:var(--friends);font-weight:600">✓ Geplant</span>' : ''}
+        ${done ? '<span style="color:var(--text-3)">✓ Erledigt</span>' : ''}
+      </div>
+      ${sched}${hints}
+    </div>
+  </div>`;
+}
+
+function wEmptyHTML(cat) {
+  return `<div class="wcw" data-cat="${cat}">
+    <div class="wempty">
+      <i data-lucide="plus-circle"></i>
+      <span>Keine Aufgaben in dieser Kategorie</span>
+    </div>
+  </div>`;
+}
+
+/* ════════════════════════════════════
+   RENDER TAB 3 – STATS
+════════════════════════════════════ */
+function getWeekStats(wk) {
+  const c = {}; getCatKeys().forEach(k => c[k] = 0);
+  S.tasks.forEach(t => {
+    if (t.status === 'done' && t.completedAt && weekKey(new Date(t.completedAt)) === wk)
+      c[t.category] = (c[t.category] || 0) + 1;
+  });
+  return c;
+}
+function getTotalStats() {
+  const c = {}; getCatKeys().forEach(k => c[k] = 0);
+  S.tasks.forEach(t => { if (t.status === 'done') c[t.category] = (c[t.category] || 0) + 1; });
+  return c;
+}
+
+function barChartHTML(stats) {
+  const mx = Math.max(1, ...Object.values(stats));
+  const H  = 68;
+  return `<div class="bchart">${getCatKeys().map(k => {
+    const ci = S.cats[k], v = stats[k] || 0;
+    const h  = Math.max(3, Math.round((v / mx) * H));
+    return `<div class="bg">
+      <div class="bt"><div class="bar" style="height:${h}px;background:${ci.color}">
+        ${v ? `<div class="bval">${v}</div>` : ''}
+      </div></div>
+      <div class="blabel" style="color:${ci.color}">${ci.short}</div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function catRows(stats) {
+  const mx = Math.max(1, ...Object.values(stats));
+  return getCatKeys().map(k => {
+    const ci = S.cats[k], v = stats[k] || 0, pct = Math.round((v / mx) * 100);
+    return `<div class="csrow">
+      <div class="csicon" style="background:${ci.bg};color:${ci.color}"><i data-lucide="${ci.icon}"></i></div>
+      <div class="csinfo">
+        <div class="cslabel">${ci.label}</div>
+        <div class="cstrack"><div class="csbar" style="width:${pct}%;background:${ci.color}"></div></div>
+      </div>
+      <div class="cscount">${v}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderStatsTab() {
+  const pane = document.getElementById('tab-stats');
+  const wk   = weekKey();
+  const ws   = getWeekStats(wk);
+  const ts   = getTotalStats();
+  const wTot = Object.values(ws).reduce((a,b)=>a+b,0);
+  const tTot = Object.values(ts).reduce((a,b)=>a+b,0);
+  const open = {}; getCatKeys().forEach(k => open[k] = S.tasks.filter(t => t.category===k && t.status!=='done').length);
+  const oTot = Object.values(open).reduce((a,b)=>a+b,0);
+
+  pane.innerHTML = `
+    <div style="padding-top:6px">
+      <div class="stats-s">
+        <div class="slabel" style="margin-bottom:10px">Diese Woche</div>
+        <div class="stat-card">
+          <div class="big-num">
+            <div class="big-num-val">${wTot}</div>
+            <div class="big-num-label">erledigte Aufgaben</div>
+          </div>
+          ${barChartHTML(ws)}
+          <div style="margin-top:12px">${catRows(ws)}</div>
+        </div>
+      </div>
+      <div class="stats-s">
+        <div class="slabel" style="margin-bottom:10px">Gesamt</div>
+        <div class="stat-card">
+          <div class="big-num">
+            <div class="big-num-val">${tTot}</div>
+            <div class="big-num-label">erledigte Aufgaben insgesamt</div>
+          </div>
+          ${catRows(ts)}
+        </div>
+      </div>
+      <div class="stats-s">
+        <div class="slabel" style="margin-bottom:10px">Offen (${oTot})</div>
+        <div class="stat-card">${catRows(open)}</div>
+      </div>
+    </div>
+  `;
+  ri();
+}
+
+/* ════════════════════════════════════
+   SHEETS
+════════════════════════════════════ */
+function openSheet(id) {
+  document.getElementById(id).classList.add('open');
+  document.getElementById('bkd').classList.add('open');
+}
+function closeSheet(id) {
+  document.getElementById(id).classList.remove('open');
+  if (!document.querySelector('.bsheet.open'))
+    document.getElementById('bkd').classList.remove('open');
+}
+function closeAll() {
+  document.querySelectorAll('.bsheet').forEach(s => s.classList.remove('open'));
+  document.querySelectorAll('.moverlay').forEach(m => m.classList.remove('open'));
+  document.getElementById('bkd').classList.remove('open');
+}
+
+// ── Task sheet ──
+function openTaskSheet(id = null) {
+  editId = id;
+  const t = id ? S.tasks.find(x => x.id === id) : null;
+  document.getElementById('sht-task-title').textContent = t ? 'Aufgabe bearbeiten' : 'Neue Aufgabe';
+  document.getElementById('inp-title').value = t ? t.title : '';
+  document.getElementById('inp-title').classList.remove('err');
+  document.getElementById('inp-desc').value  = t ? (t.description || '') : '';
+  document.getElementById('btn-del-task').style.display = t ? 'block' : 'none';
+  selCat = t ? t.category : getCatKeys()[0];
+  selUrg = t ? t.urgency  : 'medium';
+  selRecurring = t ? (t.recurring || false) : false;
+  renderCatOpts(); renderUrgOpts(); renderRecToggle();
+  openSheet('sht-task');
+  setTimeout(() => document.getElementById('inp-title').focus(), 380);
+}
+
+function renderCatOpts() {
+  const c = document.getElementById('cat-opts');
+  c.innerHTML = getCatKeys().map(k => {
+    const ci = S.cats[k], s = selCat === k;
+    return `<button class="obtn${s?' sel':''}" data-c="${k}"
+      style="color:${ci.color};${s?`background:${ci.bg};border-color:${ci.color}`:''}">
+      <i data-lucide="${ci.icon}"></i>${ci.short}
+    </button>`;
+  }).join('');
+  c.querySelectorAll('.obtn').forEach(b => {
+    b.addEventListener('click', () => { selCat = b.dataset.c; renderCatOpts(); ri(); });
+  });
+  ri();
+}
+
+function renderUrgOpts() {
+  const c = document.getElementById('urg-opts');
+  c.innerHTML = URG_KEYS.map(k => {
+    const u = URGS[k], s = selUrg === k;
+    return `<button class="obtn${s?' sel':''}" data-u="${k}"
+      style="color:${u.color};${s?`background:${u.bg};border-color:${u.color}`:''}">
+      <i data-lucide="${u.icon}"></i>${S.settings.urgencyLabels[k]}
+    </button>`;
+  }).join('');
+  c.querySelectorAll('.obtn').forEach(b => {
+    b.addEventListener('click', () => { selUrg = b.dataset.u; renderUrgOpts(); ri(); });
+  });
+  ri();
+}
+
+function renderRecToggle() {
+  const el = document.getElementById('rec-toggle');
+  if (!el) return;
+  el.classList.toggle('active', selRecurring);
+  el.onclick = () => { selRecurring = !selRecurring; renderRecToggle(); };
+  ri();
+}
+
+function saveTask() {
+  const title = document.getElementById('inp-title').value.trim();
+  if (!title) { document.getElementById('inp-title').classList.add('err'); return; }
+  const d = {
+    title,
+    description: document.getElementById('inp-desc').value.trim() || null,
+    category: selCat, urgency: selUrg,
+    recurring: selRecurring,
+  };
+  if (editId) { updateTask(editId, d); toast('Gespeichert ✓'); }
+  else        { createTask(d); toast('Aufgabe erstellt ✓'); }
+  closeSheet('sht-task');
+  renderTaskList(); ri();
+}
+
+// ── Weekly detail sheet ──
+function openWDSheet(tid, cat) {
+  wdTaskId = tid; wdCat = cat;
+  const t = S.tasks.find(x => x.id === tid);
+  if (!t) return;
+  document.getElementById('wd-title').value = t.title;
+  document.getElementById('wd-desc').value  = t.description || '';
+  document.getElementById('wd-date').value  = t.scheduledDate  || '';
+  document.getElementById('wd-time').value  = t.scheduledStart || '';
+  document.getElementById('wd-dur').value   = t.scheduledDuration || '';
+  document.getElementById('btn-markdone').style.display = t.status === 'done' ? 'none' : 'flex';
+  openSheet('sht-wd');
+}
+
+function saveWD() {
+  if (!wdTaskId) return;
+  updateTask(wdTaskId, {
+    title:             document.getElementById('wd-title').value.trim(),
+    description:       document.getElementById('wd-desc').value.trim() || null,
+    scheduledDate:     document.getElementById('wd-date').value || null,
+    scheduledStart:    document.getElementById('wd-time').value || null,
+    scheduledDuration: parseInt(document.getElementById('wd-dur').value) || null,
+  });
+  closeSheet('sht-wd');
+  renderWeeklyTab();
+  renderTaskList();
+  toast('Gespeichert ✓');
+  ri();
+}
+
+// ── Week-start modal ──
+function showWeekModal() {
+  const prev = unfinishedPrevWeek();
+  pendReturn = prev; pendDec = {};
+  prev.forEach(t => pendDec[t.id] = true); // default: return to pool
+
+  const sec = document.getElementById('mod-return-sec');
+  if (prev.length) {
+    document.getElementById('mod-wk-sub').textContent =
+      'Es gibt nicht erledigte Aufgaben der Vorwoche. Zurück in den Pool?';
+    sec.innerHTML = prev.map(t => `
+      <div class="ritem">
+        <div class="rinfo">
+          <div class="rtitle">${esc(t.title)}</div>
+          <div class="rcat" style="color:${S.cats[t.category].color}">${S.cats[t.category].label}</div>
+        </div>
+        <div class="rtog">
+          <button class="tog y sel" data-tid="${t.id}" data-v="1" title="Zurück in den Pool">↩</button>
+          <button class="tog n"     data-tid="${t.id}" data-v="0" title="Verwerfen">✕</button>
+        </div>
+      </div>`).join('') +
+      `<div style="font-size:11px;color:var(--text-3);margin:6px 0 2px;text-align:center">↩ Pool · ✕ verwerfen</div>`;
+    sec.querySelectorAll('.tog').forEach(b => {
+      b.addEventListener('click', () => {
+        const tid = b.dataset.tid;
+        pendDec[tid] = !!+b.dataset.v;
+        b.closest('.rtog').querySelectorAll('.tog').forEach(x => x.classList.remove('sel'));
+        b.classList.add('sel');
+      });
+    });
+  } else {
+    document.getElementById('mod-wk-sub').textContent =
+      'Möchtest du einen neuen Wochenplan für diese Woche erstellen?';
+    sec.innerHTML = '';
+  }
+  document.getElementById('mod-wk').classList.add('open');
+}
+
+function confirmWeekStart() {
+  // Handle prev-week decisions
+  pendReturn.forEach(t => {
+    if (pendDec[t.id]) {
+      // Return to open pool
+      updateTask(t.id, { status:'open', weeklySlot:null });
+    } else {
+      // Mark as done (discarded)
+      updateTask(t.id, { status:'done', completedAt: new Date().toISOString() });
+    }
+    // Clear from prev plan slot
+    const pk = prevWeekKey();
+    const pl = S.weeklyPlans[pk];
+    if (pl) getCatKeys().forEach(c => { if (pl[c] && pl[c].taskId === t.id) pl[c] = null; });
+  });
+  save();
+  const wk = weekKey();
+  generatePlan(wk);
+  document.getElementById('mod-wk').classList.remove('open');
+  renderWeeklyTab(); ri();
+}
+
+/* ════════════════════════════════════
+   SWIPE HANDLERS
+════════════════════════════════════ */
+// Task list: swipe-left to delete
+function initSwipeDel(cardEl, id) {
+  if (!cardEl) return;
+  let sx, sy, cx = 0, tracking = false, isHoriz = null;
+
+  cardEl.addEventListener('touchstart', e => {
+    sx = e.touches[0].clientX;
+    sy = e.touches[0].clientY;
+    tracking = true; isHoriz = null; cx = 0;
+    cardEl.style.transition = 'none';
+    cardEl._sw = false;
+  }, { passive: true });
+
+  cardEl.addEventListener('touchmove', e => {
+    if (!tracking) return;
+    const dx = e.touches[0].clientX - sx;
+    const dy = e.touches[0].clientY - sy;
+    if (isHoriz === null) {
+      if (Math.abs(dx) > Math.abs(dy) + 5) isHoriz = true;
+      else if (Math.abs(dy) > Math.abs(dx) + 5) isHoriz = false;
+    }
+    if (isHoriz && dx < 0) {
+      e.preventDefault();
+      cx = dx;
+      const clamped = Math.max(dx, -160);
+      cardEl.style.transform = `translateX(${clamped}px)`;
+      cardEl.style.opacity   = String(Math.max(0.2, 1 + clamped / 160));
+    }
+  }, { passive: false });
+
+  cardEl.addEventListener('touchend', () => {
+    if (!tracking || isHoriz !== true) { tracking = false; return; }
+    tracking = false;
+    cardEl.style.transition = 'transform .22s ease, opacity .22s ease';
+    if (cx < -80) {
+      cardEl._sw = true;
+      cardEl.style.transform = 'translateX(-110%)';
+      cardEl.style.opacity   = '0';
+      setTimeout(() => { deleteTask(id); renderTaskList(); ri(); toast('Gelöscht'); }, 230);
+    } else {
+      cardEl.style.transform = 'translateX(0)';
+      cardEl.style.opacity   = '1';
+    }
+  });
+}
+
+// Weekly: swipe right = accept, left = reject
+function initWeeklySwipe(wrapper, cardEl, cat, wk) {
+  if (!cardEl) return;
+  let sx, sy, cx = 0, tracking = false, isHoriz = null;
+  const bg = wrapper.querySelector('.wswipe-bg');
+  const hr = wrapper.querySelector('.wswipe-r');
+  const hl = wrapper.querySelector('.wswipe-l');
+
+  cardEl.addEventListener('touchstart', e => {
+    sx = e.touches[0].clientX;
+    sy = e.touches[0].clientY;
+    tracking = true; isHoriz = null; cx = 0;
+    cardEl.style.transition = 'none';
+    cardEl._sw = false;
+  }, { passive: true });
+
+  cardEl.addEventListener('touchmove', e => {
+    if (!tracking) return;
+    const dx = e.touches[0].clientX - sx;
+    const dy = e.touches[0].clientY - sy;
+    if (isHoriz === null) {
+      if (Math.abs(dx) > Math.abs(dy) + 5) isHoriz = true;
+      else if (Math.abs(dy) > Math.abs(dx) + 5) isHoriz = false;
+    }
+    if (isHoriz) {
+      e.preventDefault();
+      cx = dx;
+      const clamped = Math.max(-160, Math.min(160, dx));
+      cardEl.style.transform = `translateX(${clamped}px)`;
+      if (dx > 20)       { bg.style.background = '#DCFCE7'; hr.style.opacity='1'; hl.style.opacity='0'; }
+      else if (dx < -20) { bg.style.background = '#FEE2E2'; hr.style.opacity='0'; hl.style.opacity='1'; }
+      else               { bg.style.background = '';        hr.style.opacity='0'; hl.style.opacity='0'; }
+    }
+  }, { passive: false });
+
+  cardEl.addEventListener('touchend', () => {
+    if (!tracking || isHoriz !== true) { tracking = false; return; }
+    tracking = false;
+    cardEl.style.transition = 'transform .28s cubic-bezier(.34,1.56,.64,1)';
+    bg.style.background = ''; hr.style.opacity='0'; hl.style.opacity='0';
+
+    if (cx > 80) {
+      // Accept
+      cardEl._sw = true;
+      cardEl.style.transform = 'translateX(115%)';
+      setTimeout(() => {
+        acceptSlot(cat, wk);
+        renderWeeklyTab(); ri();
+        toast('Akzeptiert ✓');
+      }, 260);
+    } else if (cx < -80) {
+      // Reject
+      cardEl._sw = true;
+      cardEl.style.transform = 'translateX(-115%)';
+      setTimeout(() => {
+        rejectSlot(cat, wk);
+        renderWeeklyTab(); ri();
+        const pl = S.weeklyPlans[wk];
+        if (pl && pl[cat] && pl[cat].taskId) toast('Neue Aufgabe vorgeschlagen');
+        else toast('Keine weiteren Aufgaben');
+      }, 260);
+    } else {
+      cardEl.style.transform = 'translateX(0)';
+    }
+  });
+}
+
+/* ════════════════════════════════════
+   TAB SWITCHING
+════════════════════════════════════ */
+function switchTab(name) {
+  activeTab = name;
+  document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.ni').forEach(el => el.classList.remove('active'));
+  document.getElementById(`tab-${name}`).classList.add('active');
+  document.getElementById(`ni-${name}`).classList.add('active');
+  const titles = { tasks:'Aufgaben', weekly:'Wochenplan', stats:'Statistik' };
+  document.getElementById('htitle').textContent = titles[name];
+  document.getElementById('fab').classList.toggle('hidden', name !== 'tasks');
+  if      (name === 'tasks')  renderTasksTab();
+  else if (name === 'weekly') renderWeeklyTab();
+  else                        renderStatsTab();
+  ri();
+}
+
+/* ════════════════════════════════════
+   IMPORT / EXPORT
+════════════════════════════════════ */
+function exportJSON() {
+  const blob = new Blob([JSON.stringify(S, null, 2)], { type:'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement('a'), {
+    href: url,
+    download: `todoapp-export-${new Date().toISOString().split('T')[0]}.json`
+  });
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  closeSheet('sht-menu');
+  toast('Exportiert ✓');
+}
+
+function importJSON(file) {
+  const r = new FileReader();
+  r.onload = e => {
+    try {
+      const p = JSON.parse(e.target.result);
+      if (!Array.isArray(p.tasks)) { toast('Ungültige Datei ✗'); return; }
+      if (!confirm('Alle Daten werden überschrieben. Fortfahren?')) return;
+      S = {
+        tasks:       p.tasks || [],
+        weeklyPlans: p.weeklyPlans || {},
+        settings:    Object.assign({
+          retentionWeeks:12, lastCleanup:null,
+          urgencyLabels:  { high:'Heute', medium:'Diese Woche', low:'Irgendwann' },
+          urgencyWeights: { high:3, medium:2, low:1 },
+          ageDivisor: 7,
+        }, p.settings || {}),
+        cats: p.cats && Object.keys(p.cats).length > 0
+              ? p.cats
+              : JSON.parse(JSON.stringify(DEFAULT_CATS)),
+      };
+      save();
+      closeSheet('sht-menu');
+      switchTab('tasks');
+      toast('Importiert ✓');
+    } catch { toast('Fehler beim Import ✗'); }
+  };
+  r.readAsText(file);
+}
+
+function exportICS() {
+  const wk   = weekKey();
+  const plan = S.weeklyPlans[wk];
+  if (!plan) { toast('Kein Wochenplan vorhanden'); return; }
+
+  const pad = n => String(n).padStart(2, '0');
+  const icsDate = d =>
+    `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}` +
+    `T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+  const icsEsc  = s => String(s).replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\n/g,'\\n');
+
+  const events = [];
+  getCatKeys().forEach(cat => {
+    const slot = plan[cat];
+    if (!slot || !slot.taskId) return;
+    const t = S.tasks.find(x => x.id === slot.taskId);
+    if (!t || (!t.scheduledDate && !t.scheduledStart)) return;
+    const dateStr = t.scheduledDate || new Date().toISOString().split('T')[0];
+    const timeStr = t.scheduledStart || '09:00';
+    const dur     = t.scheduledDuration || 60;
+    const [yr, mo, dy] = dateStr.split('-').map(Number);
+    const [hr, mn]     = timeStr.split(':').map(Number);
+    const dtS = new Date(yr, mo-1, dy, hr, mn, 0);
+    const dtE = new Date(yr, mo-1, dy, hr, mn + dur, 0);
+    const desc = [t.description, S.cats[cat].label].filter(Boolean).join(' | ');
+    events.push([
+      'BEGIN:VEVENT',
+      `UID:${t.id}@todoapp`,
+      `DTSTAMP:${icsDate(new Date())}`,
+      `DTSTART:${icsDate(dtS)}`,
+      `DTEND:${icsDate(dtE)}`,
+      `SUMMARY:${icsEsc(t.title)}`,
+      `DESCRIPTION:${icsEsc(desc)}`,
+      `CATEGORIES:${icsEsc(S.cats[cat].label)}`,
+      'END:VEVENT',
+    ].join('\r\n'));
+  });
+
+  if (!events.length) { toast('Keine Aufgaben mit Datum/Zeit'); return; }
+
+  const wn  = (wk.match(/W(\d+)/) || ['','??'])[1];
+  const yr  = (wk.match(/(\d{4})/) || ['',''])[1];
+  const ics = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0',
+    'PRODID:-//Wochenplaner//DE',
+    'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    ...events,
+    'END:VCALENDAR',
+  ].join('\r\n');
+
+  const blob = new Blob([ics], { type:'text/calendar;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement('a'), {
+    href: url,
+    download: `wochenplan-KW${wn}-${yr}.ics`
+  });
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('Kalender exportiert ✓');
+}
+
+/* ════════════════════════════════════
+   WEEK-START CHECK
+════════════════════════════════════ */
+function checkWeekStart() {
+  const wk = weekKey();
+  // Only show if no plan exists for current week
+  if (!S.weeklyPlans[wk]) {
+    const prev = unfinishedPrevWeek();
+    // Always show modal if switching to weekly tab and no plan
+    // (called explicitly from tab switch)
+    showWeekModal();
+  }
+}
+
+/* ════════════════════════════════════
+   SCORING CHART
+════════════════════════════════════ */
+function populateScoringInputs() {
+  const st = S.settings;
+  document.getElementById('inp-lbl-high').value    = st.urgencyLabels.high;
+  document.getElementById('inp-lbl-medium').value  = st.urgencyLabels.medium;
+  document.getElementById('inp-lbl-low').value     = st.urgencyLabels.low;
+  document.getElementById('inp-wgt-high').value    = st.urgencyWeights.high;
+  document.getElementById('inp-wgt-medium').value  = st.urgencyWeights.medium;
+  document.getElementById('inp-wgt-low').value     = st.urgencyWeights.low;
+  const ageDiv = document.getElementById('inp-age-div');
+  ageDiv.value = st.ageDivisor;
+  document.getElementById('lbl-age-div').textContent = st.ageDivisor + ' Tage';
+}
+
+function renderScoringChart() {
+  const svg = document.getElementById('scoring-svg');
+  if (!svg) return;
+
+  const wH  = +document.getElementById('inp-wgt-high').value   || 3;
+  const wM  = +document.getElementById('inp-wgt-medium').value || 2;
+  const wL  = +document.getElementById('inp-wgt-low').value    || 1;
+  const div = +document.getElementById('inp-age-div').value    || 7;
+
+  const weights = { high: wH, medium: wM, low: wL };
+  const keys    = ['high', 'medium', 'low'];
+  const colors  = { high: URGS.high.color, medium: URGS.medium.color, low: URGS.low.color };
+
+  const DAYS = 30;
+  const X0 = 36, X1 = 290, Y0 = 10, Y1 = 130;
+  const xRange = X1 - X0, yRange = Y1 - Y0;
+
+  // Build data: 6 tasks – one aging per urgency, one static (age=0) per urgency
+  const pts = {};
+  keys.forEach(k => { pts[`aging_${k}`] = []; pts[`new_${k}`] = []; });
+
+  for (let t = 0; t <= DAYS; t++) {
+    let total = 0;
+    const scores = {};
+    keys.forEach(k => {
+      scores[`aging_${k}`] = weights[k] * (1 + t / div);
+      scores[`new_${k}`]   = weights[k] * (1 + 0 / div);
+      total += scores[`aging_${k}`] + scores[`new_${k}`];
+    });
+    const x = X0 + (t / DAYS) * xRange;
+    keys.forEach(k => {
+      const probA = scores[`aging_${k}`] / total * 100;
+      const probN = scores[`new_${k}`]   / total * 100;
+      const maxP  = 50; // max expected prob for scale
+      pts[`aging_${k}`].push({ x, y: Y1 - (probA / maxP) * yRange });
+      pts[`new_${k}`].push(  { x, y: Y1 - (probN / maxP) * yRange });
+    });
+  }
+
+  const toPolyline = arr =>
+    arr.map(p => `${p.x.toFixed(1)},${Math.max(Y0, Math.min(Y1, p.y)).toFixed(1)}`).join(' ');
+
+  // Reference line at 100/6 % ≈ 16.67 %
+  const refY = Y1 - (16.67 / 50) * yRange;
+
+  let html = '';
+
+  // Reference line
+  html += `<line x1="${X0}" y1="${refY.toFixed(1)}" x2="${X1}" y2="${refY.toFixed(1)}"
+    stroke="#ccc" stroke-width="1" stroke-dasharray="4,3"/>`;
+
+  // 6 data lines
+  keys.forEach(k => {
+    const c = colors[k];
+    html += `<polyline points="${toPolyline(pts[`aging_${k}`])}"
+      fill="none" stroke="${c}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    html += `<polyline points="${toPolyline(pts[`new_${k}`])}"
+      fill="none" stroke="${c}" stroke-width="1.5" stroke-dasharray="5,3" stroke-linejoin="round" stroke-linecap="round"/>`;
+  });
+
+  // Axes
+  html += `<line x1="${X0}" y1="${Y0}" x2="${X0}" y2="${Y1}" stroke="var(--border)" stroke-width="1"/>`;
+  html += `<line x1="${X0}" y1="${Y1}" x2="${X1}" y2="${Y1}" stroke="var(--border)" stroke-width="1"/>`;
+
+  // X labels
+  html += `<text x="${X0}" y="${Y1+11}" font-size="9" fill="var(--text-3)" text-anchor="middle">0</text>`;
+  html += `<text x="${X1}" y="${Y1+11}" font-size="9" fill="var(--text-3)" text-anchor="end">30 Tage</text>`;
+
+  // Y labels
+  html += `<text x="${X0-3}" y="${Y1}" font-size="9" fill="var(--text-3)" text-anchor="end">0%</text>`;
+  html += `<text x="${X0-3}" y="${refY.toFixed(1)}" font-size="9" fill="var(--text-3)" text-anchor="end">~17%</text>`;
+
+  // Legend (small dots)
+  const legendY = Y0 + 2;
+  keys.forEach((k, i) => {
+    const lx = X0 + 12 + i * 82;
+    html += `<circle cx="${lx}" cy="${legendY}" r="3" fill="${colors[k]}"/>`;
+    html += `<line x1="${lx+6}" y1="${legendY}" x2="${lx+16}" y2="${legendY}"
+      stroke="${colors[k]}" stroke-width="1.5" stroke-dasharray="3,2"/>`;
+    html += `<text x="${lx+20}" y="${legendY+3}" font-size="8" fill="var(--text-2)">${k}</text>`;
+  });
+
+  svg.innerHTML = html;
+}
+
+/* ════════════════════════════════════
+   CATEGORY MGMT UI
+════════════════════════════════════ */
+function renderCatMgmtList() {
+  const list = document.getElementById('cat-mgmt-list');
+  if (!list) return;
+  const keys = getCatKeys();
+  list.innerHTML = keys.map(k => {
+    const ci = S.cats[k];
+    return `<div class="cat-mgmt-row" data-k="${k}">
+      <div class="csicon" style="background:${ci.bg};color:${ci.color}"><i data-lucide="${ci.icon}"></i></div>
+      <div class="cat-mgmt-label">${esc(ci.label)}</div>
+      <button class="icon-btn cat-edit" data-k="${k}" title="Bearbeiten"><i data-lucide="pencil"></i></button>
+      <button class="icon-btn cat-del"  data-k="${k}" title="Löschen" style="color:var(--finance)"><i data-lucide="trash-2"></i></button>
+    </div>`;
+  }).join('');
+
+  // Hint and disabled state
+  const hint = document.getElementById('cat-limit-hint');
+  const addBtn = document.getElementById('btn-add-cat');
+  const atLimit = keys.length >= 6;
+  if (hint)   hint.style.display = atLimit ? 'inline' : 'none';
+  if (addBtn) {
+    addBtn.disabled = atLimit;
+    addBtn.style.opacity = atLimit ? '0.4' : '1';
+    addBtn.style.cursor  = atLimit ? 'not-allowed' : 'pointer';
+  }
+
+  // Edit handlers
+  list.querySelectorAll('.cat-edit').forEach(b => {
+    b.addEventListener('click', () => openCatEditForm(b.dataset.k));
+  });
+  // Delete handlers
+  list.querySelectorAll('.cat-del').forEach(b => {
+    b.addEventListener('click', () => {
+      const k = b.dataset.k;
+      if (getCatKeys().length <= 1) {
+        toast('Mindestens eine Kategorie nötig ✗'); return;
+      }
+      const count = S.tasks.filter(t => t.category === k).length;
+      const msg = count > 0
+        ? `Kategorie "${S.cats[k].label}" und ${count} Aufgabe(n) löschen?`
+        : `Kategorie "${S.cats[k].label}" löschen?`;
+      if (confirm(msg)) {
+        if (activeFilter === k) activeFilter = 'all';
+        deleteCategory(k);
+        renderCatMgmtList();
+        renderFilterBar(); renderTaskList(); ri();
+        toast('Kategorie gelöscht ✓');
+      }
+    });
+  });
+  ri();
+}
+
+function renderCatColorPicker() {
+  const c = document.getElementById('cat-color-picker');
+  if (!c) return;
+  c.innerHTML = CAT_PALETTE.map(p => {
+    const sel = p.color === catEditSelColor;
+    return `<div class="cc-swatch" data-color="${p.color}" data-bg="${p.bg}"
+      style="background:${p.color};border-color:${sel ? p.color : 'transparent'};box-shadow:${sel ? '0 0 0 2px #fff inset' : 'none'}"></div>`;
+  }).join('');
+  c.querySelectorAll('.cc-swatch').forEach(s => {
+    s.addEventListener('click', () => {
+      catEditSelColor = s.dataset.color;
+      catEditSelBg    = s.dataset.bg;
+      renderCatColorPicker();
+    });
+  });
+}
+
+function renderCatIconPicker() {
+  const c = document.getElementById('cat-icon-picker');
+  if (!c) return;
+  c.innerHTML = CAT_ICONS.map(ic => {
+    const sel = ic === catEditSelIcon;
+    return `<button class="obtn${sel ? ' sel' : ''}" data-icon="${ic}"
+      style="color:${catEditSelColor};${sel ? `background:${catEditSelBg};border-color:${catEditSelColor}` : ''}">
+      <i data-lucide="${ic}"></i>
+    </button>`;
+  }).join('');
+  c.querySelectorAll('.obtn').forEach(b => {
+    b.addEventListener('click', () => {
+      catEditSelIcon = b.dataset.icon;
+      renderCatIconPicker(); ri();
+    });
+  });
+  ri();
+}
+
+function openCatEditForm(key) {
+  const form = document.getElementById('cat-edit-form');
+  if (!form) return;
+  document.getElementById('cat-edit-key').value = key || '';
+  if (key && S.cats[key]) {
+    const ci = S.cats[key];
+    document.getElementById('cat-edit-label').value = ci.label;
+    catEditSelColor = ci.color;
+    catEditSelBg    = ci.bg;
+    catEditSelIcon  = ci.icon;
+  } else {
+    document.getElementById('cat-edit-label').value = '';
+    catEditSelColor = CAT_PALETTE[0].color;
+    catEditSelBg    = CAT_PALETTE[0].bg;
+    catEditSelIcon  = CAT_ICONS[0];
+  }
+  document.getElementById('cat-edit-label').classList.remove('err');
+  renderCatColorPicker();
+  renderCatIconPicker();
+  form.style.display = 'block';
+  ri();
+  // Scroll the form into view inside the menu sheet
+  setTimeout(() => {
+    const sheet = document.getElementById('sht-menu');
+    if (sheet) {
+      const offset = form.offsetTop - 20;
+      sheet.scrollTo({ top: offset, behavior: 'smooth' });
+    }
+  }, 80);
+}
+
+function closeCatEditForm() {
+  const form = document.getElementById('cat-edit-form');
+  if (form) form.style.display = 'none';
+}
+
+function saveCatEdit() {
+  const labelEl = document.getElementById('cat-edit-label');
+  const label   = labelEl.value.trim();
+  if (!label) {
+    labelEl.classList.add('err');
+    toast('Name darf nicht leer sein ✗');
+    return;
+  }
+  labelEl.classList.remove('err');
+  const key = document.getElementById('cat-edit-key').value;
+  const wasNew = !key;
+  if (wasNew) {
+    addCategory(label, catEditSelColor, catEditSelBg, catEditSelIcon);
+  } else {
+    updateCategory(key, label, catEditSelColor, catEditSelBg, catEditSelIcon);
+  }
+  closeCatEditForm();
+  renderCatMgmtList();
+  renderFilterBar();
+  // If task sheet is open, refresh cat-opts
+  if (document.getElementById('sht-task').classList.contains('open')) {
+    renderCatOpts();
+  }
+  renderTaskList();
+  ri();
+  toast(wasNew ? 'Kategorie hinzugefügt ✓' : 'Kategorie aktualisiert ✓');
+}
+
+/* ════════════════════════════════════
+   BOOT
+════════════════════════════════════ */
+function boot() {
+  load();
+  cleanup();
+
+  // Render initial tab
+  renderTasksTab();
+  ri();
+
+  // ── Nav buttons ──
+  document.getElementById('ni-tasks').addEventListener('click', () => switchTab('tasks'));
+  document.getElementById('ni-weekly').addEventListener('click', () => {
+    const wk = weekKey();
+    if (!S.weeklyPlans[wk]) { checkWeekStart(); }
+    else switchTab('weekly');
+  });
+  document.getElementById('ni-stats').addEventListener('click', () => switchTab('stats'));
+
+  // ── FAB ──
+  document.getElementById('fab').addEventListener('click', () => openTaskSheet());
+
+  // ── Menu ──
+  document.getElementById('btn-menu').addEventListener('click', () => {
+    openSheet('sht-menu');
+    populateScoringInputs();
+    renderScoringChart();
+    renderCatMgmtList();
+    closeCatEditForm();
+  });
+  document.getElementById('sht-menu-x').addEventListener('click', () => closeSheet('sht-menu'));
+
+  // ── Category management ──
+  document.getElementById('btn-add-cat').addEventListener('click', () => {
+    if (getCatKeys().length >= 6) return;
+    openCatEditForm(null);
+  });
+  document.getElementById('btn-cat-save').addEventListener('click', saveCatEdit);
+  document.getElementById('btn-cat-cancel').addEventListener('click', closeCatEditForm);
+  document.getElementById('cat-edit-label').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); saveCatEdit(); }
+  });
+  // ── Scoring settings ──
+  ['inp-lbl-high','inp-lbl-medium','inp-lbl-low',
+   'inp-wgt-high','inp-wgt-medium','inp-wgt-low',
+   'inp-age-div'].forEach(id => {
+    document.getElementById(id).addEventListener('input', () => {
+      const ageDiv = document.getElementById('inp-age-div');
+      document.getElementById('lbl-age-div').textContent = ageDiv.value + ' Tage';
+      renderScoringChart();
+    });
+  });
+
+  document.getElementById('btn-save-scoring').addEventListener('click', () => {
+    const lblH = document.getElementById('inp-lbl-high').value.trim();
+    const lblM = document.getElementById('inp-lbl-medium').value.trim();
+    const lblL = document.getElementById('inp-lbl-low').value.trim();
+    const wH   = parseInt(document.getElementById('inp-wgt-high').value);
+    const wM   = parseInt(document.getElementById('inp-wgt-medium').value);
+    const wL   = parseInt(document.getElementById('inp-wgt-low').value);
+    const div  = parseInt(document.getElementById('inp-age-div').value);
+
+    if (!lblH || !lblM || !lblL)        { toast('Labels dürfen nicht leer sein ✗'); return; }
+    if (wH < 1 || wM < 1 || wL < 1)    { toast('Gewichte müssen mind. 1 sein ✗'); return; }
+    if (div < 1 || div > 30)            { toast('Divisor muss zwischen 1 und 30 liegen ✗'); return; }
+
+    S.settings.urgencyLabels  = { high: lblH, medium: lblM, low: lblL };
+    S.settings.urgencyWeights = { high: wH,   medium: wM,   low: wL   };
+    S.settings.ageDivisor     = div;
+    save();
+    toast('Einstellungen gespeichert ✓');
+    renderTasksTab(); renderWeeklyTab(); renderStatsTab(); ri();
+  });
+
+  document.getElementById('btn-expjson').addEventListener('click', exportJSON);
+  document.getElementById('btn-impjson').addEventListener('click', () => {
+    document.getElementById('file-imp').click();
+  });
+  document.getElementById('file-imp').addEventListener('change', e => {
+    if (e.target.files[0]) { importJSON(e.target.files[0]); e.target.value = ''; }
+  });
+
+  // ── Task sheet ──
+  document.getElementById('sht-task-x').addEventListener('click', () => closeSheet('sht-task'));
+  document.getElementById('btn-save-task').addEventListener('click', saveTask);
+  document.getElementById('btn-del-task').addEventListener('click', () => {
+    if (!editId) return;
+    if (confirm('Aufgabe wirklich löschen?')) {
+      deleteTask(editId);
+      closeSheet('sht-task');
+      renderTaskList(); ri();
+      toast('Gelöscht');
+    }
+  });
+  // Enter key in title saves
+  document.getElementById('inp-title').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); saveTask(); }
+  });
+
+  // ── Weekly detail sheet ──
+  document.getElementById('sht-wd-x').addEventListener('click', () => closeSheet('sht-wd'));
+  document.getElementById('btn-save-wd').addEventListener('click', saveWD);
+  document.getElementById('btn-markdone').addEventListener('click', () => {
+    if (!wdTaskId) return;
+    const t = S.tasks.find(x => x.id === wdTaskId);
+    const isRecurring = t && t.recurring;
+    const doneId = wdTaskId; // capture before markDone changes state
+    const cat = wdCat;
+    // Mark done (recurring: resets to open pool; normal: status=done)
+    markDone(doneId);
+    // Always refill the slot with a new suggestion
+    const wk = weekKey();
+    if (S.weeklyPlans[wk] && cat) {
+      refillSlot(cat, wk, doneId);
+    }
+    closeSheet('sht-wd');
+    renderWeeklyTab(); renderTaskList(); ri();
+    const hasNew = S.weeklyPlans[wk]?.[cat]?.taskId;
+    toast(isRecurring
+      ? `Erledigt ↺ – ${hasNew ? 'neue Aufgabe vorgeschlagen' : 'zurück im Pool'}`
+      : `Erledigt ✓ – ${hasNew ? 'neue Aufgabe vorgeschlagen' : 'keine weiteren Aufgaben'}`
+    );
+  });
+
+  // ── Week modal ──
+  document.getElementById('btn-wk-skip').addEventListener('click', () => {
+    document.getElementById('mod-wk').classList.remove('open');
+    // If user skips, still switch to weekly tab (will show "no plan" state)
+    switchTab('weekly');
+  });
+  document.getElementById('btn-wk-start').addEventListener('click', () => {
+    confirmWeekStart();
+    switchTab('weekly');
+  });
+
+  // ── Backdrop closes all sheets ──
+  document.getElementById('bkd').addEventListener('click', closeAll);
+
+  // Initial render of category management list
+  renderCatMgmtList();
+}
+
+// Wait for Lucide to load
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => { boot(); populateScoringInputs(); renderScoringChart(); });
+} else {
+  boot(); populateScoringInputs(); renderScoringChart();
+}
+</script>
+</body>
+</html>
