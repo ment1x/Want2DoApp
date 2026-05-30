@@ -168,6 +168,15 @@ main { flex: 1; overflow: hidden; position: relative; }
   border-radius: var(--r-md);
 }
 .del-bg svg { width: 17px; height: 17px; }
+.done-bg {
+  position: absolute; inset: 0;
+  background: var(--friends-bg);
+  display: flex; align-items: center; justify-content: flex-start;
+  padding-left: 20px; color: var(--friends);
+  gap: 5px; font-size: 12px; font-weight: 600;
+  border-radius: var(--r-md);
+}
+.done-bg svg { width: 17px; height: 17px; }
 .tc {
   position: relative; background: var(--surface);
   border-radius: var(--r-md); padding: 13px 14px;
@@ -317,6 +326,18 @@ main { flex: 1; overflow: hidden; position: relative; }
   font-size: 9px; color: var(--text-2); text-align: center;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;
 }
+/* Stacked bar chart (8-week view) */
+.sbc-wrap { overflow: visible; display: block; width: 100%; margin-bottom: 8px; }
+.sbc-legend { display: flex; flex-wrap: wrap; gap: 8px 12px; margin-top: 10px; }
+.sbc-legend-item { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text-2); }
+.sbc-legend-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+/* Avg row */
+.avg-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 0 4px; border-top: 1px solid rgba(0,0,0,0.04); margin-top: 8px;
+}
+.avg-row-label { font-size: 12px; color: var(--text-2); }
+.avg-row-val { font-size: 18px; font-weight: 600; letter-spacing: -.5px; }
 .csrow {
   display: flex; align-items: center; gap: 12px;
   padding: 9px 0; border-bottom: 1px solid rgba(0,0,0,0.04);
@@ -906,6 +927,12 @@ function wRandom(tasks) {
   return scored[scored.length - 1].t;
 }
 
+// Same score formula, exposed for sorting
+function taskScore(t) {
+  const age = (Date.now() - new Date(t.createdAt).getTime()) / 86400000;
+  return S.settings.urgencyWeights[t.urgency] * (1 + age / S.settings.ageDivisor);
+}
+
 function esc(s) {
   return String(s)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -1151,6 +1178,7 @@ function taskCardHTML(t) {
   const descText = t.description
     ? `<div class="tc-desc">${esc(t.description).substring(0,100)}${t.description.length>100?'…':''}</div>` : '';
   return `<div class="tcw" data-id="${t.id}">
+    <div class="done-bg"><i data-lucide="check-circle"></i><span>Erledigt</span></div>
     <div class="del-bg"><i data-lucide="trash-2"></i><span>Löschen</span></div>
     <div class="tc${done ? ' done-area' : ''}" data-id="${t.id}">
       <div class="tc-top">
@@ -1179,11 +1207,7 @@ function renderTaskList() {
   if (!wrap) return;
   let open = S.tasks.filter(t => t.status !== 'done');
   if (activeFilter !== 'all') open = open.filter(t => t.category === activeFilter);
-  open.sort((a, b) => {
-    const w = S.settings.urgencyWeights;
-    if (w[b.urgency] !== w[a.urgency]) return w[b.urgency] - w[a.urgency];
-    return new Date(a.createdAt) - new Date(b.createdAt);
-  });
+  open.sort((a, b) => taskScore(b) - taskScore(a));
   let done = S.tasks.filter(t => t.status === 'done');
   if (activeFilter !== 'all') done = done.filter(t => t.category === activeFilter);
   done.sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
@@ -1408,6 +1432,90 @@ function getTotalStats() {
   return c;
 }
 
+function getLast8Weeks() {
+  const weeks = [];
+  for (let i = 7; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i * 7);
+    weeks.push(weekKey(d));
+  }
+  return weeks;
+}
+
+function getAvgPerWeek() {
+  const doneTasks = S.tasks.filter(t => t.status === 'done');
+  if (!doneTasks.length) return '0.0';
+  const allTasks = S.tasks;
+  if (!allTasks.length) return '0.0';
+  const oldest = allTasks.reduce((min, t) => {
+    const d = new Date(t.createdAt);
+    return d < min ? d : min;
+  }, new Date());
+  const weeksElapsed = Math.max(1, Math.ceil((Date.now() - oldest.getTime()) / (7 * 86400000)));
+  return (doneTasks.length / weeksElapsed).toFixed(1);
+}
+
+function stackedBarSVG() {
+  const weeks    = getLast8Weeks();
+  const catKeys  = getCatKeys();
+  const curWk    = weekKey();
+  const W = 340, H = 88, PAD_T = 20, PAD_L = 2, PAD_R = 2, LABEL_H = 20;
+  const totalH   = PAD_T + H + LABEL_H;
+  const barSlot  = (W - PAD_L - PAD_R) / weeks.length;
+  const gap      = barSlot * 0.15;
+  const bw       = barSlot - gap * 2;
+
+  const data = weeks.map(wk => {
+    const stats = getWeekStats(wk);
+    const total = Object.values(stats).reduce((a, b) => a + b, 0);
+    return { wk, stats, total };
+  });
+  const maxTotal = Math.max(1, ...data.map(d => d.total));
+
+  let rects = '', xlabels = '';
+
+  data.forEach((d, i) => {
+    const x    = PAD_L + i * barSlot + gap;
+    const isCur = d.wk === curWk;
+    let stackY  = PAD_T + H;
+
+    const nonZero = catKeys.filter(k => (d.stats[k] || 0) > 0);
+    nonZero.forEach((k, ki) => {
+      const v  = d.stats[k];
+      const h  = (v / maxTotal) * H;
+      stackY  -= h;
+      const isTop = ki === nonZero.length - 1;
+      const rx    = isTop ? 3 : 0;
+      rects += `<rect x="${x.toFixed(1)}" y="${stackY.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(h, 1).toFixed(1)}" fill="${S.cats[k].color}" rx="${rx}"/>`;
+    });
+
+    // Total label above bar
+    if (d.total > 0) {
+      const topY = PAD_T + H - (d.total / maxTotal) * H;
+      rects += `<text x="${(x + bw / 2).toFixed(1)}" y="${(topY - 4).toFixed(1)}" text-anchor="middle" font-size="9" fill="#6B6B6B" font-weight="600">${d.total}</text>`;
+    }
+
+    // X-axis week label
+    const m   = d.wk.match(/\d{4}-W(\d+)/);
+    const lbl = m ? `KW ${+m[1]}` : '';
+    xlabels += `<text x="${(x + bw / 2).toFixed(1)}" y="${(PAD_T + H + 14).toFixed(1)}" text-anchor="middle" font-size="9" fill="${isCur ? '#1A1A1A' : '#A8A8A8'}" font-weight="${isCur ? '700' : '400'}">${lbl}</text>`;
+  });
+
+  // Legend
+  const legendItems = catKeys.map(k => {
+    const ci = S.cats[k];
+    return `<div class="sbc-legend-item"><div class="sbc-legend-dot" style="background:${ci.color}"></div>${ci.short}</div>`;
+  }).join('');
+
+  return `
+    <svg class="sbc-wrap" viewBox="0 0 ${W} ${totalH}">
+      <line x1="${PAD_L}" y1="${PAD_T + H}" x2="${W - PAD_R}" y2="${PAD_T + H}" stroke="rgba(0,0,0,0.07)" stroke-width="1"/>
+      ${rects}${xlabels}
+    </svg>
+    <div class="sbc-legend">${legendItems}</div>
+  `;
+}
+
 function barChartHTML(stats) {
   const mx = Math.max(1, ...Object.values(stats));
   const H  = 68;
@@ -1447,6 +1555,7 @@ function renderStatsTab() {
   const tTot = Object.values(ts).reduce((a,b)=>a+b,0);
   const open = {}; getCatKeys().forEach(k => open[k] = S.tasks.filter(t => t.category===k && t.status!=='done').length);
   const oTot = Object.values(open).reduce((a,b)=>a+b,0);
+  const avg  = getAvgPerWeek();
 
   pane.innerHTML = `
     <div style="padding-top:6px">
@@ -1468,7 +1577,11 @@ function renderStatsTab() {
             <div class="big-num-val">${tTot}</div>
             <div class="big-num-label">erledigte Aufgaben insgesamt</div>
           </div>
-          ${catRows(ts)}
+          ${stackedBarSVG()}
+          <div class="avg-row">
+            <div class="avg-row-label">Ø Aufgaben pro Woche</div>
+            <div class="avg-row-val">${avg}</div>
+          </div>
         </div>
       </div>
       <div class="stats-s">
@@ -1661,10 +1774,13 @@ function confirmWeekStart() {
 /* ════════════════════════════════════
    SWIPE HANDLERS
 ════════════════════════════════════ */
-// Task list: swipe-left to delete
+// Task list: swipe-left = delete, swipe-right = done
 function initSwipeDel(cardEl, id) {
   if (!cardEl) return;
   let sx, sy, cx = 0, tracking = false, isHoriz = null;
+  const wrapper  = cardEl.closest('.tcw');
+  const doneBg   = wrapper ? wrapper.querySelector('.done-bg') : null;
+  const delBg    = wrapper ? wrapper.querySelector('.del-bg')  : null;
 
   cardEl.addEventListener('touchstart', e => {
     sx = e.touches[0].clientX;
@@ -1688,18 +1804,41 @@ function initSwipeDel(cardEl, id) {
       const clamped = Math.max(dx, -160);
       cardEl.style.transform = `translateX(${clamped}px)`;
       cardEl.style.opacity   = String(Math.max(0.2, 1 + clamped / 160));
+      if (doneBg) doneBg.style.opacity = '0';
+      if (delBg)  delBg.style.opacity  = '1';
+    } else if (isHoriz && dx > 0) {
+      e.preventDefault();
+      cx = dx;
+      const clamped = Math.min(dx, 160);
+      cardEl.style.transform = `translateX(${clamped}px)`;
+      cardEl.style.opacity   = String(Math.max(0.2, 1 - clamped / 160));
+      if (doneBg) doneBg.style.opacity = '1';
+      if (delBg)  delBg.style.opacity  = '0';
     }
   }, { passive: false });
 
   cardEl.addEventListener('touchend', () => {
     if (!tracking || isHoriz !== true) { tracking = false; return; }
     tracking = false;
+    if (doneBg) doneBg.style.opacity = '';
+    if (delBg)  delBg.style.opacity  = '';
     cardEl.style.transition = 'transform .22s ease, opacity .22s ease';
     if (cx < -80) {
+      // DELETE
       cardEl._sw = true;
       cardEl.style.transform = 'translateX(-110%)';
       cardEl.style.opacity   = '0';
       setTimeout(() => { deleteTask(id); renderTaskList(); ri(); toast('Gelöscht'); }, 230);
+    } else if (cx > 80) {
+      // MARK DONE
+      cardEl._sw = true;
+      cardEl.style.transform = 'translateX(110%)';
+      cardEl.style.opacity   = '0';
+      setTimeout(() => {
+        markDone(id);
+        renderTaskList(); renderStatsTab(); ri();
+        toast('Erledigt ✓');
+      }, 230);
     } else {
       cardEl.style.transform = 'translateX(0)';
       cardEl.style.opacity   = '1';
