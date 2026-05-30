@@ -825,6 +825,7 @@ let selUrg       = 'medium';
 let selRecurring = false;
 let pendReturn   = [];     // tasks from prev week awaiting decision
 let pendDec      = {};     // { taskId: bool (true = return to pool) }
+let pendingDelete = null;  // { id, snapshot, weeklySlotKey, planSlotSnapshot, timer }
 
 // Category-edit form state
 let catEditSelColor = '#7C3AED';
@@ -858,6 +859,18 @@ function load() {
   } catch(e) { console.warn('load', e); }
   if (!S.cats || Object.keys(S.cats).length === 0) {
     S.cats = JSON.parse(JSON.stringify(DEFAULT_CATS));
+  }
+  // Migration: ensure every task has a completions array, and migrate
+  // existing recurring completedAt values into it so old completions
+  // are not lost.
+  if (Array.isArray(S.tasks)) {
+    S.tasks.forEach(t => {
+      if (!Array.isArray(t.completions)) t.completions = [];
+      if (t.recurring && t.completedAt) {
+        if (t.completions.length === 0) t.completions.push(t.completedAt);
+        t.completedAt = null;
+      }
+    });
   }
 }
 function save() {
@@ -940,18 +953,108 @@ function esc(s) {
 
 function toast(msg, dur = 2200) {
   const el = document.getElementById('toast');
-  el.textContent = msg; el.classList.add('show');
+  el.innerHTML = esc(msg); el.classList.add('show');
+  el.style.pointerEvents = 'none';
   clearTimeout(el._t);
   el._t = setTimeout(() => el.classList.remove('show'), dur);
+}
+
+// B3: Toast mit Rückgängig-Button
+function toastWithUndo(msg) {
+  const el = document.getElementById('toast');
+  el.innerHTML = `<span>${esc(msg)}</span><button id="undo-btn" style="background:none;border:none;color:#fff;font-weight:600;cursor:pointer;padding:0 0 0 12px;font-size:13px;font-family:inherit">Rückgängig</button>`;
+  el.classList.add('show');
+  el.style.pointerEvents = 'auto';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.classList.remove('show'); el.style.pointerEvents = 'none'; }, 4200);
+  document.getElementById('undo-btn')?.addEventListener('click', undoDelete);
+}
+
+// B2: Soft-Delete – Aufgabe als pending-delete markieren, Timer starten
+function softDelete(id) {
+  const task = S.tasks.find(t => t.id === id);
+  if (!task) return;
+  // Vorherigen pendingDelete sofort finalisieren
+  if (pendingDelete) {
+    clearTimeout(pendingDelete.timer);
+    commitDelete(pendingDelete.id);
+  }
+  // Snapshots erstellen
+  const snapshot = JSON.parse(JSON.stringify(task));
+  let weeklySlotKey = null;
+  let planSlotSnapshot = null;
+  if (task.weeklySlot) {
+    weeklySlotKey = task.weeklySlot;
+    const pl = S.weeklyPlans[weeklySlotKey];
+    if (pl) {
+      getCatKeys().forEach(c => {
+        if (pl[c] && pl[c].taskId === id) {
+          planSlotSnapshot = { cat: c, slot: JSON.parse(JSON.stringify(pl[c])) };
+        }
+      });
+    }
+  }
+  // Als pending-delete markieren → aus Views ausblenden
+  updateTask(id, { status: 'pending-delete' });
+  const timer = setTimeout(() => commitDelete(id), 4000);
+  pendingDelete = { id, snapshot, weeklySlotKey, planSlotSnapshot, timer };
+  toastWithUndo('Gelöscht');
+  renderTaskList(); ri();
+}
+
+// B4: Löschen rückgängig machen
+function undoDelete() {
+  if (!pendingDelete) return;
+  clearTimeout(pendingDelete.timer);
+  const { id, snapshot, weeklySlotKey, planSlotSnapshot } = pendingDelete;
+  pendingDelete = null;
+  // Task-Snapshot vollständig wiederherstellen
+  updateTask(id, {
+    status:            snapshot.status,
+    weeklySlot:        snapshot.weeklySlot,
+    title:             snapshot.title,
+    description:       snapshot.description,
+    category:          snapshot.category,
+    urgency:           snapshot.urgency,
+    recurring:         snapshot.recurring,
+    createdAt:         snapshot.createdAt,
+    completedAt:       snapshot.completedAt,
+    scheduledDate:     snapshot.scheduledDate,
+    scheduledStart:    snapshot.scheduledStart,
+    scheduledDuration: snapshot.scheduledDuration,
+  });
+  // Plan-Slot wiederherstellen – nur wenn Slot aktuell leer ist
+  if (weeklySlotKey && planSlotSnapshot) {
+    const pl = S.weeklyPlans[weeklySlotKey];
+    if (pl) {
+      const cat = planSlotSnapshot.cat;
+      if (!pl[cat] || !pl[cat].taskId) {
+        pl[cat] = planSlotSnapshot.slot;
+        save();
+      }
+    }
+  }
+  renderTaskList(); renderWeeklyTab(); ri();
+  toast('Wiederhergestellt ✓');
+}
+
+// B5: Löschen endgültig durchführen
+function commitDelete(id) {
+  if (pendingDelete && pendingDelete.id === id) pendingDelete = null;
+  deleteTask(id);
+  renderTaskList(); ri();
 }
 
 function cleanup() {
   const cut = Date.now() - S.settings.retentionWeeks * 7 * 86400000;
   S.tasks = S.tasks.filter(t => {
+    if (t.recurring) return true;
     if (t.status === 'done' && t.completedAt)
       return new Date(t.completedAt).getTime() > cut;
     return true;
   });
+  // Veraltete pending-delete Tasks aus vorherigen Sessions entfernen
+  S.tasks = S.tasks.filter(t => t.status !== 'pending-delete');
   S.settings.lastCleanup = new Date().toISOString();
   save();
 }
@@ -971,6 +1074,7 @@ function createTask(d) {
     completedAt: null, scheduledDate: null,
     scheduledStart: null, scheduledDuration: null,
     weeklySlot: null, status: 'open',
+    completions: [],
   };
   S.tasks.push(t); save(); return t;
 }
@@ -995,9 +1099,11 @@ function markDone(id) {
   const now = new Date().toISOString();
   if (t.recurring) {
     // Keep in pool: record completion for stats, reset age, clear weekly slot
+    const comps = Array.isArray(t.completions) ? t.completions.slice() : [];
+    comps.push(now);          // record this completion for stats
     updateTask(id, {
       status:      'open',
-      completedAt: now,       // snapshot for stats
+      completions: comps,     // one entry per completion
       createdAt:   now,       // reset age → low score initially
       weeklySlot:  null,
       scheduledDate:     null,
@@ -1205,7 +1311,7 @@ function taskCardHTML(t) {
 function renderTaskList() {
   const wrap = document.getElementById('tab-tasks').querySelector('.tlist-wrap');
   if (!wrap) return;
-  let open = S.tasks.filter(t => t.status !== 'done');
+  let open = S.tasks.filter(t => t.status !== 'done' && t.status !== 'pending-delete');
   if (activeFilter !== 'all') open = open.filter(t => t.category === activeFilter);
   open.sort((a, b) => taskScore(b) - taskScore(a));
   let done = S.tasks.filter(t => t.status === 'done');
@@ -1305,7 +1411,7 @@ function renderWeeklyTab() {
   getCatKeys().forEach(cat => {
     const ci   = S.cats[cat];
     const slot = plan[cat];
-    const t    = slot && slot.taskId ? S.tasks.find(x => x.id === slot.taskId) : null;
+    const t    = slot && slot.taskId ? S.tasks.find(x => x.id === slot.taskId && x.status !== 'pending-delete') : null;
     rowsHTML += `<div class="wrow">
       <div class="wrow-label" style="color:${ci.color}">
         <i data-lucide="${ci.icon}"></i>${ci.label}
@@ -1343,6 +1449,10 @@ function renderWeeklyTab() {
     // Only active (non-done, non-accepted) cards get swipe
     if (t && t.status !== 'done' && slot && !slot.accepted) {
       initWeeklySwipe(wrapper, card, cat, wk);
+    }
+    // A2: Akzeptierte (nicht-erledigte) Karten erhalten den accepted-swipe
+    if (t && t.status !== 'done' && slot && slot.accepted) {
+      initAcceptedSwipe(wrapper, card, cat, wk);
     }
   });
 
@@ -1382,12 +1492,22 @@ function wCardHTML(t, slot, cat) {
       : '';
 
   const hints = (!done && !acc)
-    ? `<div class="swipe-hints"><span>← Ablehnen</span><span>Akzeptieren →</span></div>` : '';
+    ? `<div class="swipe-hints"><span>← Ablehnen</span><span>Akzeptieren →</span></div>`
+    : (!done && acc)
+      ? `<div class="swipe-hints"><span>← In Pool</span><span>Erledigt →</span></div>`
+      : '';
+
+  const swipeR = acc
+    ? `<span class="wswipe-r"><i data-lucide="check-circle" style="width:13px;height:13px"></i> Erledigt</span>`
+    : `<span class="wswipe-r"><i data-lucide="check" style="width:13px;height:13px"></i> Akzeptieren</span>`;
+  const swipeL = acc
+    ? `<span class="wswipe-l">In Pool <i data-lucide="rotate-ccw" style="width:13px;height:13px"></i></span>`
+    : `<span class="wswipe-l">Ablehnen <i data-lucide="x" style="width:13px;height:13px"></i></span>`;
 
   return `<div class="wcw" data-cat="${cat}" data-tid="${t.id}">
     <div class="wswipe-bg">
-      <span class="wswipe-r"><i data-lucide="check" style="width:13px;height:13px"></i> Akzeptieren</span>
-      <span class="wswipe-l">Ablehnen <i data-lucide="x" style="width:13px;height:13px"></i></span>
+      ${swipeR}
+      ${swipeL}
     </div>
     <div class="wcard${acc ? ' accepted' : ''}${done ? ' wdone' : ''}">
       <div class="wcard-top">
@@ -1421,14 +1541,28 @@ function wEmptyHTML(cat) {
 function getWeekStats(wk) {
   const c = {}; getCatKeys().forEach(k => c[k] = 0);
   S.tasks.forEach(t => {
-    if (t.status === 'done' && t.completedAt && weekKey(new Date(t.completedAt)) === wk)
+    if (t.recurring) {
+      const comps = Array.isArray(t.completions) ? t.completions : [];
+      comps.forEach(iso => {
+        if (iso && weekKey(new Date(iso)) === wk)
+          c[t.category] = (c[t.category] || 0) + 1;
+      });
+    } else if (t.status === 'done' && t.completedAt && weekKey(new Date(t.completedAt)) === wk) {
       c[t.category] = (c[t.category] || 0) + 1;
+    }
   });
   return c;
 }
 function getTotalStats() {
   const c = {}; getCatKeys().forEach(k => c[k] = 0);
-  S.tasks.forEach(t => { if (t.status === 'done') c[t.category] = (c[t.category] || 0) + 1; });
+  S.tasks.forEach(t => {
+    if (t.recurring) {
+      const comps = Array.isArray(t.completions) ? t.completions : [];
+      if (comps.length) c[t.category] = (c[t.category] || 0) + comps.length;
+    } else if (t.status === 'done') {
+      c[t.category] = (c[t.category] || 0) + 1;
+    }
+  });
   return c;
 }
 
@@ -1443,8 +1577,13 @@ function getLast8Weeks() {
 }
 
 function getAvgPerWeek() {
-  const doneTasks = S.tasks.filter(t => t.status === 'done');
-  if (!doneTasks.length) return '0.0';
+  const doneCount = S.tasks.reduce((sum, t) => {
+    if (t.recurring) {
+      return sum + (Array.isArray(t.completions) ? t.completions.length : 0);
+    }
+    return sum + (t.status === 'done' ? 1 : 0);
+  }, 0);
+  if (!doneCount) return '0.0';
   const allTasks = S.tasks;
   if (!allTasks.length) return '0.0';
   const oldest = allTasks.reduce((min, t) => {
@@ -1452,7 +1591,7 @@ function getAvgPerWeek() {
     return d < min ? d : min;
   }, new Date());
   const weeksElapsed = Math.max(1, Math.ceil((Date.now() - oldest.getTime()) / (7 * 86400000)));
-  return (doneTasks.length / weeksElapsed).toFixed(1);
+  return (doneCount / weeksElapsed).toFixed(1);
 }
 
 function stackedBarSVG() {
@@ -1828,7 +1967,7 @@ function initSwipeDel(cardEl, id) {
       cardEl._sw = true;
       cardEl.style.transform = 'translateX(-110%)';
       cardEl.style.opacity   = '0';
-      setTimeout(() => { deleteTask(id); renderTaskList(); ri(); toast('Gelöscht'); }, 230);
+      setTimeout(() => { softDelete(id); }, 230);
     } else if (cx > 80) {
       // MARK DONE
       cardEl._sw = true;
@@ -1906,6 +2045,88 @@ function initWeeklySwipe(wrapper, cardEl, cat, wk) {
         const pl = S.weeklyPlans[wk];
         if (pl && pl[cat] && pl[cat].taskId) toast('Neue Aufgabe vorgeschlagen');
         else toast('Keine weiteren Aufgaben');
+      }, 260);
+    } else {
+      cardEl.style.transform = 'translateX(0)';
+    }
+  });
+}
+
+// A1: Weekly akzeptierte Karten: rechts=Erledigt, links=In Pool
+function initAcceptedSwipe(wrapper, cardEl, cat, wk) {
+  if (!cardEl) return;
+  let sx, sy, cx = 0, tracking = false, isHoriz = null;
+  const bg = wrapper.querySelector('.wswipe-bg');
+  const hr = wrapper.querySelector('.wswipe-r');
+  const hl = wrapper.querySelector('.wswipe-l');
+
+  cardEl.addEventListener('touchstart', e => {
+    sx = e.touches[0].clientX;
+    sy = e.touches[0].clientY;
+    tracking = true; isHoriz = null; cx = 0;
+    cardEl.style.transition = 'none';
+    cardEl._sw = false;
+  }, { passive: true });
+
+  cardEl.addEventListener('touchmove', e => {
+    if (!tracking) return;
+    const dx = e.touches[0].clientX - sx;
+    const dy = e.touches[0].clientY - sy;
+    if (isHoriz === null) {
+      if (Math.abs(dx) > Math.abs(dy) + 5) isHoriz = true;
+      else if (Math.abs(dy) > Math.abs(dx) + 5) isHoriz = false;
+    }
+    if (isHoriz) {
+      e.preventDefault();
+      cx = dx;
+      const clamped = Math.max(-160, Math.min(160, dx));
+      cardEl.style.transform = `translateX(${clamped}px)`;
+      if (dx > 20)       { bg.style.background = '#DCFCE7'; hr.style.opacity='1'; hl.style.opacity='0'; }
+      else if (dx < -20) { bg.style.background = '#FEE2E2'; hr.style.opacity='0'; hl.style.opacity='1'; }
+      else               { bg.style.background = '';        hr.style.opacity='0'; hl.style.opacity='0'; }
+    }
+  }, { passive: false });
+
+  cardEl.addEventListener('touchend', () => {
+    if (!tracking || isHoriz !== true) { tracking = false; return; }
+    tracking = false;
+    cardEl.style.transition = 'transform .28s cubic-bezier(.34,1.56,.64,1)';
+    bg.style.background = ''; hr.style.opacity='0'; hl.style.opacity='0';
+
+    if (cx > 80) {
+      // Erledigt
+      cardEl._sw = true;
+      cardEl.style.transform = 'translateX(115%)';
+      setTimeout(() => {
+        const tid = wrapper.dataset.tid;
+        if (!tid) return;
+        const isRecurring = S.tasks.find(x => x.id === tid)?.recurring;
+        markDone(tid);
+        refillSlot(cat, wk, tid);
+        renderWeeklyTab(); renderTaskList(); renderStatsTab(); ri();
+        const hasNew = S.weeklyPlans[wk]?.[cat]?.taskId;
+        toast(isRecurring
+          ? `Erledigt ↺ – ${hasNew ? 'neue Aufgabe vorgeschlagen' : 'zurück im Pool'}`
+          : `Erledigt ✓ – ${hasNew ? 'neue Aufgabe vorgeschlagen' : 'keine weiteren Aufgaben'}`
+        );
+      }, 260);
+    } else if (cx < -80) {
+      // Zurück in Pool
+      cardEl._sw = true;
+      cardEl.style.transform = 'translateX(-115%)';
+      setTimeout(() => {
+        const tid = wrapper.dataset.tid;
+        if (!tid) return;
+        // Aufgabe zurück in Pool setzen
+        updateTask(tid, { status: 'open', weeklySlot: null });
+        // Slot leeren und neu befüllen (tid ausschließen)
+        if (S.weeklyPlans[wk]) {
+          S.weeklyPlans[wk][cat] = null;
+        }
+        refillSlot(cat, wk, tid);
+        renderWeeklyTab(); renderTaskList(); ri();
+        const hasNew = S.weeklyPlans[wk]?.[cat]?.taskId;
+        toast(`Zurück im Pool – ${hasNew ? 'neue Aufgabe vorgeschlagen' : 'keine weiteren Aufgaben'}`);
       }, 260);
     } else {
       cardEl.style.transform = 'translateX(0)';
@@ -2396,10 +2617,9 @@ function boot() {
   document.getElementById('btn-del-task').addEventListener('click', () => {
     if (!editId) return;
     if (confirm('Aufgabe wirklich löschen?')) {
-      deleteTask(editId);
+      const idToDelete = editId;
       closeSheet('sht-task');
-      renderTaskList(); ri();
-      toast('Gelöscht');
+      softDelete(idToDelete);
     }
   });
   // Enter key in title saves
@@ -2424,7 +2644,7 @@ function boot() {
       refillSlot(cat, wk, doneId);
     }
     closeSheet('sht-wd');
-    renderWeeklyTab(); renderTaskList(); ri();
+    renderWeeklyTab(); renderTaskList(); renderStatsTab(); ri();
     const hasNew = S.weeklyPlans[wk]?.[cat]?.taskId;
     toast(isRecurring
       ? `Erledigt ↺ – ${hasNew ? 'neue Aufgabe vorgeschlagen' : 'zurück im Pool'}`
